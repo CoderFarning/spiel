@@ -448,11 +448,14 @@ class SurvivalGame(arcade.Window):
                              self.width - 20, self.height - 40,
                              arcade.color.WHITE, 18,
                              anchor_x="right", anchor_y="top")
-            if self.controls_hint_timer > 0:
-                arcade.draw_text("Pfeiltasten = Bewegung",
-                                 self.width - 20, self.height - 65,
-                                 arcade.color.WHITE, 18,
-                                 anchor_x="right", anchor_y="top")
+            arcade.draw_text("Pfeiltasten = Bewegung",
+                             self.width - 20, self.height - 65,
+                             arcade.color.WHITE, 18,
+                             anchor_x="right", anchor_y="top")
+            arcade.draw_text("Schießen = Leertaste",
+                             self.width - 20, self.height - 90,
+                             arcade.color.WHITE, 18,
+                             anchor_x="right", anchor_y="top")
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
                                  self.width - 20, self.height - 40,
@@ -502,7 +505,7 @@ class SurvivalGame(arcade.Window):
                 if not self.wave_active:
                     px2 = minimap_x + (self.portal_x + MAP_WIDTH/2) * MINIMAP_SCALE
                     py2 = minimap_y + (self.portal_y + MAP_HEIGHT/2) * MINIMAP_SCALE
-                    arcade.draw_circle_filled(px2, py2, 5, arcade.color.PURPLE)
+                    arcade.draw_circle_filled(px2, py2, 5, arcade.color.DARK_BLUE)
 
         elif self.state == "shop":
             missing_ammo = self.get_missing_ammo()
@@ -531,7 +534,7 @@ class SurvivalGame(arcade.Window):
 
             bx, by, bw, bh = self.get_shop_fill_button_rect()
             can_fill = self.total_coins >= fill_cost and missing_ammo > 0
-            fill_color = arcade.color.BLUE_GRAY if can_fill else arcade.color.RED
+            fill_color = arcade.color.DARK_SPRING_GREEN if can_fill else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, fill_color)
             arcade.draw_text(f"🔫 Alles auffüllen   Preis: {fill_cost} 🪙",
                              self.width / 2, by + bh / 2,
