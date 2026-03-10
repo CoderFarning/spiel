@@ -313,11 +313,6 @@ class SurvivalGame(arcade.Window):
                 return
 
         # Wave System
-        if self.controls_hint_timer > 0:
-            self.controls_hint_timer -= delta_time
-            if self.controls_hint_timer < 0:
-                self.controls_hint_timer = 0.0
-
         if self.wave_message_timer > 0:
             self.wave_message_timer -= delta_time
             if self.wave_message_timer <= 0:
