@@ -249,7 +249,7 @@ class SurvivalGame(arcade.Window):
 
     def get_shop_fill_button_rect(self):
         fill_cost = self.get_missing_ammo() * AMMO_COST
-        label = f"🔫 Alles auffüllen   Preis: {fill_cost} 🪙"
+        label = f"Alles auffüllen   Preis: {fill_cost} 🪙"
         text_obj = arcade.Text(label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
         bw = text_obj.content_width + 60
         bh = text_obj.content_height + 26
@@ -268,7 +268,7 @@ class SurvivalGame(arcade.Window):
         if amount <= 0:
             return
         if self.total_coins < cost:
-            self.zu_teuer_timer = 5.0
+            self.zu_teuer_timer = 1.0
             return
         self.total_coins -= cost
         self.shots_left += amount
@@ -549,7 +549,7 @@ class SurvivalGame(arcade.Window):
             can_fill = self.total_coins >= fill_cost and missing_ammo > 0
             fill_color = arcade.color.DARK_SPRING_GREEN if can_fill else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, fill_color)
-            arcade.draw_text(f"🔫 Alles auffüllen   Preis: {fill_cost} 🪙",
+            arcade.draw_text(f"Alles auffüllen   Preis: {fill_cost} 🪙",
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 24,
                              anchor_x="center", anchor_y="center")
@@ -563,9 +563,15 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
             if self.zu_teuer_timer > 0:
-                arcade.draw_text("Zu teuer",
+                arcade.draw_lrbt_rectangle_outline(0, self.width, 0, self.height, arcade.color.BLACK, 12)
+                for ox, oy in [(-3, -3), (-3, 3), (3, -3), (3, 3), (0, -4), (0, 4), (-4, 0), (4, 0)]:
+                    arcade.draw_text("zu teuer",
+                                     self.width / 2 + ox, self.height / 2 + oy,
+                                     arcade.color.BLACK, 90,
+                                     anchor_x="center", anchor_y="center")
+                arcade.draw_text("zu teuer",
                                  self.width / 2, self.height / 2,
-                                 arcade.color.RED, 80,
+                                 arcade.color.RED, 90,
                                  anchor_x="center", anchor_y="center")
 
         elif self.state == "gameover":
