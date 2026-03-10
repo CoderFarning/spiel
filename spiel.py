@@ -268,7 +268,7 @@ class SurvivalGame(arcade.Window):
         if amount <= 0:
             return
         if self.total_coins < cost:
-            self.zu_teuer_timer = 1.0
+            self.zu_teuer_timer = 2.0
             return
         self.total_coins -= cost
         self.shots_left += amount
@@ -563,13 +563,12 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
             if self.zu_teuer_timer > 0:
-                arcade.draw_lrbt_rectangle_outline(0, self.width, 0, self.height, arcade.color.BLACK, 12)
-                for ox, oy in [(-3, -3), (-3, 3), (3, -3), (3, 3), (0, -4), (0, 4), (-4, 0), (4, 0)]:
-                    arcade.draw_text("zu teuer",
+                for ox, oy in [(-2, -2), (-2, 2), (2, -2), (2, 2), (0, -3), (0, 3), (-3, 0), (3, 0)]:
+                    arcade.draw_text("Zu teuer",
                                      self.width / 2 + ox, self.height / 2 + oy,
                                      arcade.color.BLACK, 90,
                                      anchor_x="center", anchor_y="center")
-                arcade.draw_text("zu teuer",
+                arcade.draw_text("Zu teuer",
                                  self.width / 2, self.height / 2,
                                  arcade.color.RED, 90,
                                  anchor_x="center", anchor_y="center")
