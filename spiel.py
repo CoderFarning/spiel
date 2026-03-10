@@ -525,14 +525,9 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 260,
                              arcade.color.WHITE, 26,
                              anchor_x="center")
-            arcade.draw_text(f"1 Munition = {AMMO_COST} 🪙",
-                             self.width / 2, self.height - 320,
-                             arcade.color.LIGHT_GRAY, 22,
-                             anchor_x="center")
-
             bx, by, bw, bh = self.get_shop_buy_one_button_rect()
             can_buy_one = self.total_coins >= AMMO_COST and missing_ammo > 0
-            one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.GRAY
+            one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
             arcade.draw_text(f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙",
                              self.width / 2, by + bh / 2,
@@ -541,7 +536,7 @@ class SurvivalGame(arcade.Window):
 
             bx, by, bw, bh = self.get_shop_fill_button_rect()
             can_fill = self.total_coins >= fill_cost and missing_ammo > 0
-            fill_color = arcade.color.BLUE_GRAY if can_fill else arcade.color.GRAY
+            fill_color = arcade.color.BLUE_GRAY if can_fill else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, fill_color)
             arcade.draw_text(f"🔫 Alles auffüllen   Preis: {fill_cost} 🪙",
                              self.width / 2, by + bh / 2,
@@ -554,6 +549,12 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 26,
                              anchor_x="center", anchor_y="center")
+
+            if self.zu_teuer_timer > 0:
+                arcade.draw_text("Zu teuer",
+                                 self.width / 2, self.height / 2,
+                                 arcade.color.RED, 80,
+                                 anchor_x="center", anchor_y="center")
 
         elif self.state == "gameover":
 
