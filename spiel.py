@@ -55,7 +55,7 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
-        self.controls_hint_timer = 10.0
+	        self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
@@ -129,7 +129,7 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
-        self.controls_hint_timer = 10.0
+	        self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
