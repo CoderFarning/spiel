@@ -71,7 +71,6 @@ class SurvivalGame(arcade.Window):
         self.wave_button = None
         self.shop_return_button = None
         self.shop_buy_one_button = None
-        self.shop_fill_button = None
         self.hit_sound = arcade.load_sound("getroffen.wav")
         try:
             self.win_sound = arcade.load_sound("gewonnen.wav")
@@ -197,11 +196,6 @@ class SurvivalGame(arcade.Window):
                 self.buy_ammo(1)
                 return
 
-            bx, by, bw, bh = self.ui_rects.get("shop_fill", self.get_shop_fill_button_rect())
-            if bx <= x <= bx + bw and by <= y <= by + bh:
-                self.buy_ammo(self.get_missing_ammo())
-                return
-
         elif self.state == "gameover":
             self.state = "menu"
 
@@ -247,15 +241,6 @@ class SurvivalGame(arcade.Window):
         by = self.height - 400
         return (bx, by, bw, bh)
 
-    def get_shop_fill_button_rect(self):
-        fill_cost = self.get_missing_ammo() * AMMO_COST
-        label = f"Alles auffüllen   Preis: {fill_cost} 🪙"
-        text_obj = arcade.Text(label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
-        bw = text_obj.content_width + 60
-        bh = text_obj.content_height + 26
-        bx = self.width / 2 - bw / 2
-        by = self.height - 490
-        return (bx, by, bw, bh)
 
     def get_missing_ammo(self):
         return max(0, MAX_SHOTS - self.shots_left)
@@ -520,7 +505,6 @@ class SurvivalGame(arcade.Window):
 
         elif self.state == "shop":
             missing_ammo = self.get_missing_ammo()
-            fill_cost = missing_ammo * AMMO_COST
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, arcade.color.DARK_BLUE_GRAY)
             arcade.draw_text("SHOP",
                              self.width / 2, self.height - 120,
@@ -540,16 +524,6 @@ class SurvivalGame(arcade.Window):
             one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
             arcade.draw_text(f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙",
-                             self.width / 2, by + bh / 2,
-                             arcade.color.WHITE, 24,
-                             anchor_x="center", anchor_y="center")
-
-            bx, by, bw, bh = self.get_shop_fill_button_rect()
-            self.ui_rects["shop_fill"] = (bx, by, bw, bh)
-            can_fill = self.total_coins >= fill_cost and missing_ammo > 0
-            fill_color = arcade.color.DARK_SPRING_GREEN if can_fill else arcade.color.RED
-            arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, fill_color)
-            arcade.draw_text(f"Alles auffüllen   Preis: {fill_cost} 🪙",
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 24,
                              anchor_x="center", anchor_y="center")
