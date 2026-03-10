@@ -62,6 +62,7 @@ class SurvivalGame(arcade.Window):
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
         self.zu_teuer_timer = 0.0
+        self.ui_rects = {}
 
         self.player_health = 100
         self.shots_left = MAX_SHOTS
@@ -136,6 +137,7 @@ class SurvivalGame(arcade.Window):
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
         self.zu_teuer_timer = 0.0
+        self.ui_rects = {}
 
     # ---------------- INPUT ----------------
     def on_key_press(self, key, modifiers):
@@ -156,13 +158,14 @@ class SurvivalGame(arcade.Window):
     def on_mouse_press(self, x, y, button, modifiers):
 
         if self.state == "menu" and self.start_button:
-            bx, by, bw, bh = self.start_button
+            bx, by, bw, bh = self.ui_rects.get("start_button", self.start_button)
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.setup_game()
                 self.state = "game"
+                return
 
         elif self.state == "game":
-            bx, by, bw, bh = self.get_wave_button_rect()
+            bx, by, bw, bh = self.ui_rects.get("wave_button", self.get_wave_button_rect())
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 if not self.wave_active:
                     if self.wave_started_once and self.wave_completed:
@@ -181,17 +184,23 @@ class SurvivalGame(arcade.Window):
                     self.wave_kills = 0
                     self.wave_lives_lost = 0
                     self.wave_reward_coins = 0
+                return
 
         elif self.state == "shop":
-            bx, by, bw, bh = self.get_shop_leave_button_rect()
+            bx, by, bw, bh = self.ui_rects.get("shop_leave", self.get_shop_leave_button_rect())
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.leave_shop()
-            bx, by, bw, bh = self.get_shop_buy_one_button_rect()
+                return
+
+            bx, by, bw, bh = self.ui_rects.get("shop_buy_one", self.get_shop_buy_one_button_rect())
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_ammo(1)
-            bx, by, bw, bh = self.get_shop_fill_button_rect()
+                return
+
+            bx, by, bw, bh = self.ui_rects.get("shop_fill", self.get_shop_fill_button_rect())
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_ammo(self.get_missing_ammo())
+                return
 
         elif self.state == "gameover":
             self.state = "menu"
@@ -408,6 +417,7 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
             self.start_button = (bx, by, bw, bh)
+            self.ui_rects["start_button"] = (bx, by, bw, bh)
 
         elif self.state == "game":
 
@@ -426,6 +436,7 @@ class SurvivalGame(arcade.Window):
 
             # Wave Button
             bx, by, bw, bh = self.get_wave_button_rect()
+            self.ui_rects["wave_button"] = (bx, by, bw, bh)
 
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
             wave_button_text = "Welle starten" if not self.wave_started_once else "Neue Welle"
@@ -524,6 +535,7 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 26,
                              anchor_x="center")
             bx, by, bw, bh = self.get_shop_buy_one_button_rect()
+            self.ui_rects["shop_buy_one"] = (bx, by, bw, bh)
             can_buy_one = self.total_coins >= AMMO_COST and missing_ammo > 0
             one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
@@ -533,6 +545,7 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
             bx, by, bw, bh = self.get_shop_fill_button_rect()
+            self.ui_rects["shop_fill"] = (bx, by, bw, bh)
             can_fill = self.total_coins >= fill_cost and missing_ammo > 0
             fill_color = arcade.color.DARK_SPRING_GREEN if can_fill else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, fill_color)
@@ -542,6 +555,7 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
             bx, by, bw, bh = self.get_shop_leave_button_rect()
+            self.ui_rects["shop_leave"] = (bx, by, bw, bh)
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
             arcade.draw_text("Verlassen",
                              self.width / 2, by + bh / 2,
