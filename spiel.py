@@ -61,7 +61,6 @@ class SurvivalGame(arcade.Window):
         self.wave_reward_coins = 0
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
-        self.zu_teuer_timer = 0.0
         self.ui_rects = {}
 
         self.player_health = 100
@@ -72,6 +71,8 @@ class SurvivalGame(arcade.Window):
         self.shop_return_button = None
         self.shop_buy_one_button = None
         self.hit_sound = arcade.load_sound("getroffen.wav")
+        self.bg_sound = arcade.load_sound("hintergrund.wav")
+        self.bg_player = None
         try:
             self.win_sound = arcade.load_sound("gewonnen.wav")
         except Exception:
@@ -135,7 +136,6 @@ class SurvivalGame(arcade.Window):
         self.wave_reward_coins = 0
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
-        self.zu_teuer_timer = 0.0
         self.ui_rects = {}
 
     # ---------------- INPUT ----------------
@@ -161,6 +161,8 @@ class SurvivalGame(arcade.Window):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.setup_game()
                 self.state = "game"
+                if not self.bg_player:
+                    self.bg_player = arcade.play_sound(self.bg_sound, volume=0.25, loop=True)
                 return
 
         elif self.state == "game":
@@ -198,6 +200,9 @@ class SurvivalGame(arcade.Window):
 
         elif self.state == "gameover":
             self.state = "menu"
+            if self.bg_player:
+                self.bg_player.pause()
+                self.bg_player = None
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -242,18 +247,11 @@ class SurvivalGame(arcade.Window):
         return (bx, by, bw, bh)
 
 
-    def get_missing_ammo(self):
-        return max(0, MAX_SHOTS - self.shots_left)
-
     def buy_ammo(self, amount):
         if amount <= 0:
             return
-        amount = min(amount, self.get_missing_ammo())
         cost = amount * AMMO_COST
-        if amount <= 0:
-            return
         if self.total_coins < cost:
-            self.zu_teuer_timer = 2.0
             return
         self.total_coins -= cost
         self.shots_left += amount
@@ -263,6 +261,12 @@ class SurvivalGame(arcade.Window):
         self.portal_cooldown_timer = PORTAL_COOLDOWN
         self.player.center_x = 0
         self.player.center_y = 0
+
+    def on_close(self):
+        if self.bg_player:
+            self.bg_player.pause()
+            self.bg_player = None
+        super().on_close()
 
     # ---------------- UPDATE ----------------
     def on_update(self, delta_time):
@@ -294,11 +298,6 @@ class SurvivalGame(arcade.Window):
             self.portal_cooldown_timer -= delta_time
             if self.portal_cooldown_timer < 0:
                 self.portal_cooldown_timer = 0.0
-
-        if self.zu_teuer_timer > 0:
-            self.zu_teuer_timer -= delta_time
-            if self.zu_teuer_timer < 0:
-                self.zu_teuer_timer = 0.0
 
         if not self.wave_active and self.portal_cooldown_timer <= 0:
             portal_distance = math.hypot(self.player.center_x - self.portal_x, self.player.center_y - self.portal_y)
@@ -504,7 +503,6 @@ class SurvivalGame(arcade.Window):
                     arcade.draw_circle_filled(px2, py2, 5, arcade.color.DARK_BLUE)
 
         elif self.state == "shop":
-            missing_ammo = self.get_missing_ammo()
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, arcade.color.DARK_BLUE_GRAY)
             arcade.draw_text("SHOP",
                              self.width / 2, self.height - 120,
@@ -520,7 +518,7 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center")
             bx, by, bw, bh = self.get_shop_buy_one_button_rect()
             self.ui_rects["shop_buy_one"] = (bx, by, bw, bh)
-            can_buy_one = self.total_coins >= AMMO_COST and missing_ammo > 0
+            can_buy_one = self.total_coins >= AMMO_COST
             one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
             arcade.draw_text(f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙",
@@ -535,17 +533,6 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 26,
                              anchor_x="center", anchor_y="center")
-
-            if self.zu_teuer_timer > 0:
-                for ox, oy in [(-2, -2), (-2, 2), (2, -2), (2, 2), (0, -3), (0, 3), (-3, 0), (3, 0)]:
-                    arcade.draw_text("Zu teuer",
-                                     self.width / 2 + ox, self.height / 2 + oy,
-                                     arcade.color.BLACK, 90,
-                                     anchor_x="center", anchor_y="center")
-                arcade.draw_text("Zu teuer",
-                                 self.width / 2, self.height / 2,
-                                 arcade.color.RED, 90,
-                                 anchor_x="center", anchor_y="center")
 
         elif self.state == "gameover":
 
