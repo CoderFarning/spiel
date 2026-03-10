@@ -61,6 +61,7 @@ class SurvivalGame(arcade.Window):
         self.wave_reward_coins = 0
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
+        self.zu_teuer_timer = 0.0
 
         self.player_health = 100
         self.shots_left = MAX_SHOTS
@@ -134,6 +135,7 @@ class SurvivalGame(arcade.Window):
         self.wave_reward_coins = 0
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
+        self.zu_teuer_timer = 0.0
 
     # ---------------- INPUT ----------------
     def on_key_press(self, key, modifiers):
@@ -254,9 +256,13 @@ class SurvivalGame(arcade.Window):
             return
         amount = min(amount, self.get_missing_ammo())
         cost = amount * AMMO_COST
-        if amount > 0 and self.total_coins >= cost:
-            self.total_coins -= cost
-            self.shots_left += amount
+        if amount <= 0:
+            return
+        if self.total_coins < cost:
+            self.zu_teuer_timer = 5.0
+            return
+        self.total_coins -= cost
+        self.shots_left += amount
 
     def leave_shop(self):
         self.state = "game"
@@ -294,6 +300,11 @@ class SurvivalGame(arcade.Window):
             self.portal_cooldown_timer -= delta_time
             if self.portal_cooldown_timer < 0:
                 self.portal_cooldown_timer = 0.0
+
+        if self.zu_teuer_timer > 0:
+            self.zu_teuer_timer -= delta_time
+            if self.zu_teuer_timer < 0:
+                self.zu_teuer_timer = 0.0
 
         if not self.wave_active and self.portal_cooldown_timer <= 0:
             portal_distance = math.hypot(self.player.center_x - self.portal_x, self.player.center_y - self.portal_y)
