@@ -313,8 +313,8 @@ class SurvivalGame(arcade.Window):
         # Movement
         self.player.change_x = 0
         self.player.change_y = 0
-        sprinting = (self.energy > 0) and (arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys) and (arcade.key.UP in self.keys)
-        speed = PLAYER_SPEED * 2 if sprinting else PLAYER_SPEED
+        shift_down = arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys
+        speed = PLAYER_SPEED + (1 if shift_down and self.energy > 0 else 0)
 
         if arcade.key.UP in self.keys:
             self.player.change_y = speed
@@ -328,11 +328,14 @@ class SurvivalGame(arcade.Window):
         self.player.center_x += self.player.change_x
         self.player.center_y += self.player.change_y
 
-        if sprinting and self.player.change_y > 0:
+        moving = self.player.change_x != 0 or self.player.change_y != 0
+        if shift_down and moving and self.energy > 0:
             self.sprint_drain_acc += delta_time
-            while self.sprint_drain_acc >= 0.5 and self.energy > 0:
+            while self.sprint_drain_acc >= 2.0 and self.energy > 0:
                 self.energy = max(0.0, self.energy - 1.0)
-                self.sprint_drain_acc -= 0.5
+                self.sprint_drain_acc -= 2.0
+        elif not shift_down:
+            self.sprint_drain_acc = 0.0
 
         # Map Grenzen
         self.player.center_x = max(-MAP_WIDTH//2, min(MAP_WIDTH//2, self.player.center_x))
@@ -485,28 +488,28 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
                              hud_left_x, hud_left_y - hud_left_gap * 3,
                              arcade.color.WHITE, 20)
-            arcade.draw_text("M = Karte",
-                             self.width - 20, self.height - 40,
-                             arcade.color.WHITE, 18,
-                             anchor_x="right", anchor_y="top")
-            arcade.draw_text("Pfeiltasten = Bewegung",
-                             self.width - 20, self.height - 95,
-                             arcade.color.WHITE, 18,
-                             anchor_x="right", anchor_y="top")
-            arcade.draw_text("Schießen = Leertaste",
-                             self.width - 20, self.height - 150,
-                             arcade.color.WHITE, 18,
-                             anchor_x="right", anchor_y="top")
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
-                                 self.width - 20, self.height - 230,
+                                 self.width - 20, self.height - 15,
                                  arcade.color.RED, 34,
                                  anchor_x="right", anchor_y="top")
             else:
                 arcade.draw_text("Vorbereitung",
-                                 self.width - 20, self.height - 230,
+                                 self.width - 20, self.height - 15,
                                  arcade.color.GREEN, 34,
                                  anchor_x="right", anchor_y="top")
+            arcade.draw_text("M = Karte",
+                             self.width - 20, self.height - 65,
+                             arcade.color.WHITE, 18,
+                             anchor_x="right", anchor_y="top")
+            arcade.draw_text("Pfeiltasten = Bewegung",
+                             self.width - 20, self.height - 120,
+                             arcade.color.WHITE, 18,
+                             anchor_x="right", anchor_y="top")
+            arcade.draw_text("Schießen = Leertaste",
+                             self.width - 20, self.height - 175,
+                             arcade.color.WHITE, 18,
+                             anchor_x="right", anchor_y="top")
 
             if self.wave_message:
                 arcade.draw_text(self.wave_message,
