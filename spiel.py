@@ -17,7 +17,7 @@ ENEMY_SPEED = 5
 MINIMAP_SCALE = 0.05
 
 SHOT_RADIUS = 500
-MAX_SHOTS = 30
+MAX_SHOTS = 30. 
 EXPLOSION_DURATION = 0.25
 PORTAL_RADIUS = 140
 PORTAL_COOLDOWN = 0.4
@@ -76,12 +76,9 @@ class SurvivalGame(arcade.Window):
         self.bg_sound = arcade.load_sound("hintergrund.wav")
         self.bg_player = None
         try:
-            self.info_sprite = arcade.Sprite("info.png", scale=1.0)
-            self.info_sprite_list = arcade.SpriteList()
-            self.info_sprite_list.append(self.info_sprite)
+            self.info_texture = arcade.load_texture("info.png")
         except Exception:
-            self.info_sprite = None
-            self.info_sprite_list = None
+            self.info_texture = None
         try:
             self.win_sound = arcade.load_sound("gewonnen.wav")
         except Exception:
@@ -525,13 +522,8 @@ class SurvivalGame(arcade.Window):
                                  anchor_x="right", anchor_y="top")
 
             bx, by, bw, bh = self.ui_rects["info_button"]
-            if self.info_sprite:
-                self.info_sprite.center_x = bx + bw / 2
-                self.info_sprite.center_y = by + bh / 2
-                # Force icon to fit the button rect.
-                self.info_sprite.width = bw
-                self.info_sprite.height = bh
-                self.info_sprite_list.draw()
+            if self.info_texture:
+                arcade.draw_texture_rectangle(bx + bw / 2, by + bh / 2, bw, bh, self.info_texture)
             else:
                 # Fallback if info.png is missing.
                 arcade.draw_circle_filled(bx + bw / 2, by + bh / 2, min(bw, bh) / 2, arcade.color.DARK_BLUE)
