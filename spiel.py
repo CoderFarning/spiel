@@ -65,6 +65,8 @@ class SurvivalGame(arcade.Window):
 
         self.player_health = 100
         self.shots_left = MAX_SHOTS
+        self.energy = 100.0
+        self.sprint_drain_acc = 0.0
 
         self.start_button = None
         self.wave_button = None
@@ -102,6 +104,8 @@ class SurvivalGame(arcade.Window):
 
         self.player_health = 100
         self.shots_left = MAX_SHOTS
+        self.energy = 100.0
+        self.sprint_drain_acc = 0.0
         self.portal_x = 0
         self.portal_y = MAP_HEIGHT // 2 - 220
         self.portal_sprite = arcade.Sprite("portal.png", scale=0.8)
@@ -309,7 +313,8 @@ class SurvivalGame(arcade.Window):
         # Movement
         self.player.change_x = 0
         self.player.change_y = 0
-        speed = PLAYER_SPEED * 2 if arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys else PLAYER_SPEED
+        sprinting = (self.energy > 0) and (arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys) and (arcade.key.UP in self.keys)
+        speed = PLAYER_SPEED * 2 if sprinting else PLAYER_SPEED
 
         if arcade.key.UP in self.keys:
             self.player.change_y = speed
@@ -322,6 +327,12 @@ class SurvivalGame(arcade.Window):
 
         self.player.center_x += self.player.change_x
         self.player.center_y += self.player.change_y
+
+        if sprinting and self.player.change_y > 0:
+            self.sprint_drain_acc += delta_time
+            while self.sprint_drain_acc >= 0.5 and self.energy > 0:
+                self.energy = max(0.0, self.energy - 1.0)
+                self.sprint_drain_acc -= 0.5
 
         # Map Grenzen
         self.player.center_x = max(-MAP_WIDTH//2, min(MAP_WIDTH//2, self.player.center_x))
@@ -466,8 +477,11 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"🔫 Schüsse: {self.shots_left}",
                              20, self.height-70,
                              arcade.color.WHITE, 20)
-            arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
+            arcade.draw_text(f"Energie: {int(self.energy)}%",
                              20, self.height-100,
+                             arcade.color.WHITE, 20)
+            arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
+                             20, self.height-130,
                              arcade.color.WHITE, 20)
             arcade.draw_text("M = Karte",
                              self.width - 20, self.height - 40,
