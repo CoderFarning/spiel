@@ -161,8 +161,6 @@ class SurvivalGame(arcade.Window):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.setup_game()
                 self.state = "game"
-                if not self.bg_player:
-                    self.bg_player = arcade.play_sound(self.bg_sound, volume=0.25, loop=True)
                 return
 
         elif self.state == "game":
@@ -185,6 +183,7 @@ class SurvivalGame(arcade.Window):
                     self.wave_kills = 0
                     self.wave_lives_lost = 0
                     self.wave_reward_coins = 0
+                    self.start_bg()
                 return
 
         elif self.state == "shop":
@@ -200,9 +199,7 @@ class SurvivalGame(arcade.Window):
 
         elif self.state == "gameover":
             self.state = "menu"
-            if self.bg_player:
-                self.bg_player.pause()
-                self.bg_player = None
+            self.stop_bg()
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -256,6 +253,15 @@ class SurvivalGame(arcade.Window):
         self.total_coins -= cost
         self.shots_left += amount
 
+    def start_bg(self):
+        if not self.bg_player:
+            self.bg_player = arcade.play_sound(self.bg_sound, volume=0.25, loop=True)
+
+    def stop_bg(self):
+        if self.bg_player:
+            self.bg_player.pause()
+            self.bg_player = None
+
     def leave_shop(self):
         self.state = "game"
         self.portal_cooldown_timer = PORTAL_COOLDOWN
@@ -263,9 +269,7 @@ class SurvivalGame(arcade.Window):
         self.player.center_y = 0
 
     def on_close(self):
-        if self.bg_player:
-            self.bg_player.pause()
-            self.bg_player = None
+        self.stop_bg()
         super().on_close()
 
     # ---------------- UPDATE ----------------
@@ -277,15 +281,16 @@ class SurvivalGame(arcade.Window):
         # Movement
         self.player.change_x = 0
         self.player.change_y = 0
+        speed = PLAYER_SPEED * 2 if arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys else PLAYER_SPEED
 
         if arcade.key.UP in self.keys:
-            self.player.change_y = PLAYER_SPEED
+            self.player.change_y = speed
         if arcade.key.DOWN in self.keys:
-            self.player.change_y = -PLAYER_SPEED
+            self.player.change_y = -speed
         if arcade.key.LEFT in self.keys:
-            self.player.change_x = -PLAYER_SPEED
+            self.player.change_x = -speed
         if arcade.key.RIGHT in self.keys:
-            self.player.change_x = PLAYER_SPEED
+            self.player.change_x = speed
 
         self.player.center_x += self.player.change_x
         self.player.center_y += self.player.change_y
@@ -328,6 +333,7 @@ class SurvivalGame(arcade.Window):
 
             if self.spawn_cycles_done >= self.spawn_cycles_per_wave and alive_enemies == 0:
                 self.wave_active = False
+                self.stop_bg()
                 self.wave_completed = True
                 self.wave_message = "WELLE BESTANDEN"
                 self.wave_message_timer = 3.0
