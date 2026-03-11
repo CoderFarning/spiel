@@ -229,6 +229,11 @@ class SurvivalGame(arcade.Window):
                 self.buy_ammo(1)
                 return
 
+            bx, by, bw, bh = self.ui_rects["shop_energy"]
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self.buy_energy()
+                return
+
         elif self.state == "gameover":
             self.state = "menu"
             self.stop_bg()
@@ -255,22 +260,31 @@ class SurvivalGame(arcade.Window):
         self.shots_left -= hits
 
     def get_wave_button_rect(self):
-        return (20, 20, 280, 60)
+        return (20, 20, 320, 70)
 
     def get_shop_leave_button_rect(self):
         text_obj = arcade.Text(self.shop_leave_label, 0, 0, arcade.color.WHITE, 26, anchor_x="center", anchor_y="center")
-        bw = text_obj.content_width + 120
-        bh = text_obj.content_height + 40
+        bw = text_obj.content_width + 140
+        bh = text_obj.content_height + 50
         bx = self.width / 2 - bw / 2
         by = 120
         return (bx, by, bw, bh)
 
     def get_shop_buy_one_button_rect(self):
         text_obj = arcade.Text(self.shop_buy_one_label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
-        bw = text_obj.content_width + 80
-        bh = text_obj.content_height + 32
+        bw = text_obj.content_width + 100
+        bh = text_obj.content_height + 42
         bx = self.width / 2 - bw / 2
         by = self.height - 400
+        return (bx, by, bw, bh)
+
+    def get_shop_energy_button_rect(self):
+        label = "⚡ Energie auffüllen"
+        text_obj = arcade.Text(label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
+        bw = text_obj.content_width + 100
+        bh = text_obj.content_height + 42
+        bx = self.width / 2 - bw / 2
+        by = self.height - 480
         return (bx, by, bw, bh)
 
 
@@ -282,6 +296,16 @@ class SurvivalGame(arcade.Window):
             return
         self.total_coins -= cost
         self.shots_left += amount
+
+    def buy_energy(self):
+        missing = max(0, 100 - int(self.energy))
+        if missing <= 0:
+            return
+        cost = missing * 25
+        if self.total_coins < cost:
+            return
+        self.total_coins -= cost
+        self.energy = 100.0
 
     def start_bg(self):
         if not self.bg_player:
@@ -298,7 +322,7 @@ class SurvivalGame(arcade.Window):
 
     def update_ui_rects(self):
         # Menu
-        bw, bh = 340, 90
+        bw, bh = 360, 100
         bx = self.width // 2 - bw // 2
         by = self.height // 2 - bh // 2
         self.ui_rects["start_button"] = (bx, by, bw, bh)
@@ -306,13 +330,14 @@ class SurvivalGame(arcade.Window):
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
         # Info-Button direkt unter der Wellenanzeige oben rechts
-        self.ui_rects["info_button"] = (self.width - 80, self.height - 125, 60, 60)
+        self.ui_rects["info_button"] = (self.width - 80, self.height - 150, 60, 60)
 
         # Info overlay
         self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
 
         # Shop
         self.ui_rects["shop_buy_one"] = self.get_shop_buy_one_button_rect()
+        self.ui_rects["shop_energy"] = self.get_shop_energy_button_rect()
         self.ui_rects["shop_leave"] = self.get_shop_leave_button_rect()
         self._ui_dirty = False
 
@@ -357,9 +382,9 @@ class SurvivalGame(arcade.Window):
         moving = self.player.change_x != 0 or self.player.change_y != 0
         if shift_down and moving and self.energy > 0:
             self.sprint_drain_acc += delta_time
-            while self.sprint_drain_acc >= 2.0 and self.energy > 0:
+            while self.sprint_drain_acc >= 1.0 and self.energy > 0:
                 self.energy = max(0.0, self.energy - 1.0)
-                self.sprint_drain_acc -= 2.0
+                self.sprint_drain_acc -= 1.0
         elif not shift_down:
             self.sprint_drain_acc = 0.0
 
