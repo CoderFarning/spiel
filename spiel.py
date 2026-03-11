@@ -78,6 +78,12 @@ class SurvivalGame(arcade.Window):
         except Exception:
             self.win_sound = None
 
+        # Cached UI text metrics so buttons don't stutter from per-frame Text creation.
+        self.shop_buy_one_label = f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙"
+        self.shop_leave_label = "Verlassen"
+        self._ui_dirty = True
+        self.update_ui_rects()
+
         self.setup_game()
 
     # ---------------- SETUP ----------------
@@ -155,16 +161,17 @@ class SurvivalGame(arcade.Window):
         self.keys.discard(key)
 
     def on_mouse_press(self, x, y, button, modifiers):
+        self.ensure_ui_rects()
 
-        if self.state == "menu" and self.start_button:
-            bx, by, bw, bh = self.ui_rects.get("start_button", self.start_button)
+        if self.state == "menu":
+            bx, by, bw, bh = self.ui_rects["start_button"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.setup_game()
                 self.state = "game"
                 return
 
         elif self.state == "game":
-            bx, by, bw, bh = self.ui_rects.get("wave_button", self.get_wave_button_rect())
+            bx, by, bw, bh = self.ui_rects["wave_button"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 if not self.wave_active:
                     if self.wave_started_once and self.wave_completed:
@@ -187,12 +194,12 @@ class SurvivalGame(arcade.Window):
                 return
 
         elif self.state == "shop":
-            bx, by, bw, bh = self.ui_rects.get("shop_leave", self.get_shop_leave_button_rect())
+            bx, by, bw, bh = self.ui_rects["shop_leave"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.leave_shop()
                 return
 
-            bx, by, bw, bh = self.ui_rects.get("shop_buy_one", self.get_shop_buy_one_button_rect())
+            bx, by, bw, bh = self.ui_rects["shop_buy_one"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_ammo(1)
                 return
@@ -226,8 +233,7 @@ class SurvivalGame(arcade.Window):
         return (20, 20, 250, 50)
 
     def get_shop_leave_button_rect(self):
-        label = "Verlassen"
-        text_obj = arcade.Text(label, 0, 0, arcade.color.WHITE, 26, anchor_x="center", anchor_y="center")
+        text_obj = arcade.Text(self.shop_leave_label, 0, 0, arcade.color.WHITE, 26, anchor_x="center", anchor_y="center")
         bw = text_obj.content_width + 90
         bh = text_obj.content_height + 30
         bx = self.width / 2 - bw / 2
@@ -235,8 +241,7 @@ class SurvivalGame(arcade.Window):
         return (bx, by, bw, bh)
 
     def get_shop_buy_one_button_rect(self):
-        label = f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙"
-        text_obj = arcade.Text(label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
+        text_obj = arcade.Text(self.shop_buy_one_label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
         bw = text_obj.content_width + 60
         bh = text_obj.content_height + 26
         bx = self.width / 2 - bw / 2
@@ -261,6 +266,29 @@ class SurvivalGame(arcade.Window):
         if self.bg_player:
             self.bg_player.pause()
             self.bg_player = None
+
+    def ensure_ui_rects(self):
+        if self._ui_dirty or not self.ui_rects:
+            self.update_ui_rects()
+
+    def update_ui_rects(self):
+        # Menu
+        bw, bh = 300, 80
+        bx = self.width // 2 - bw // 2
+        by = self.height // 2 - bh // 2
+        self.ui_rects["start_button"] = (bx, by, bw, bh)
+
+        # Game
+        self.ui_rects["wave_button"] = self.get_wave_button_rect()
+
+        # Shop
+        self.ui_rects["shop_buy_one"] = self.get_shop_buy_one_button_rect()
+        self.ui_rects["shop_leave"] = self.get_shop_leave_button_rect()
+        self._ui_dirty = False
+
+    def on_resize(self, width, height):
+        super().on_resize(width, height)
+        self._ui_dirty = True
 
     def leave_shop(self):
         self.state = "game"
@@ -388,6 +416,7 @@ class SurvivalGame(arcade.Window):
     # ---------------- DRAW ----------------
     def on_draw(self):
         self.clear()
+        self.ensure_ui_rects()
 
         if self.state == "menu":
 
@@ -396,18 +425,14 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 60,
                              anchor_x="center")
 
-            bw, bh = 300, 80
-            bx = self.width//2 - bw//2
-            by = self.height//2 - bh//2
+            bx, by, bw, bh = self.ui_rects["start_button"]
 
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
             arcade.draw_text("START",
                              self.width//2, self.height//2,
                              arcade.color.WHITE, 30,
                              anchor_x="center", anchor_y="center")
-
             self.start_button = (bx, by, bw, bh)
-            self.ui_rects["start_button"] = (bx, by, bw, bh)
 
         elif self.state == "game":
 
@@ -425,8 +450,7 @@ class SurvivalGame(arcade.Window):
                                      anchor_x="center")
 
             # Wave Button
-            bx, by, bw, bh = self.get_wave_button_rect()
-            self.ui_rects["wave_button"] = (bx, by, bw, bh)
+            bx, by, bw, bh = self.ui_rects["wave_button"]
 
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
             wave_button_text = "Welle starten" if not self.wave_started_once else "Neue Welle"
@@ -523,19 +547,18 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 26,
                              anchor_x="center")
             bx, by, bw, bh = self.get_shop_buy_one_button_rect()
-            self.ui_rects["shop_buy_one"] = (bx, by, bw, bh)
+            bx, by, bw, bh = self.ui_rects["shop_buy_one"]
             can_buy_one = self.total_coins >= AMMO_COST
             one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
-            arcade.draw_text(f"🔫 Kaufe 1   Preis: {AMMO_COST} 🪙",
+            arcade.draw_text(self.shop_buy_one_label,
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 24,
                              anchor_x="center", anchor_y="center")
 
-            bx, by, bw, bh = self.get_shop_leave_button_rect()
-            self.ui_rects["shop_leave"] = (bx, by, bw, bh)
+            bx, by, bw, bh = self.ui_rects["shop_leave"]
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
-            arcade.draw_text("Verlassen",
+            arcade.draw_text(self.shop_leave_label,
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 26,
                              anchor_x="center", anchor_y="center")
