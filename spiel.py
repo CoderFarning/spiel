@@ -470,41 +470,43 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 20,
                              anchor_x="center", anchor_y="center")
             # Anzeigen
+            hud_left_x = 20
+            hud_left_y = self.height - 40
+            hud_left_gap = 55
             arcade.draw_text(f"❤️ Leben: {self.player_health}",
-                             20, self.height-40,
+                             hud_left_x, hud_left_y,
                              arcade.color.WHITE, 20)
-
             arcade.draw_text(f"🔫 Schüsse: {self.shots_left}",
-                             20, self.height-70,
+                             hud_left_x, hud_left_y - hud_left_gap,
                              arcade.color.WHITE, 20)
-            arcade.draw_text(f"Energie: {int(self.energy)}%",
-                             20, self.height-100,
+            arcade.draw_text(f"⚡ Energie: {int(self.energy)}%",
+                             hud_left_x, hud_left_y - hud_left_gap * 2,
                              arcade.color.WHITE, 20)
             arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
-                             20, self.height-130,
+                             hud_left_x, hud_left_y - hud_left_gap * 3,
                              arcade.color.WHITE, 20)
             arcade.draw_text("M = Karte",
                              self.width - 20, self.height - 40,
                              arcade.color.WHITE, 18,
                              anchor_x="right", anchor_y="top")
             arcade.draw_text("Pfeiltasten = Bewegung",
-                             self.width - 20, self.height - 65,
+                             self.width - 20, self.height - 95,
                              arcade.color.WHITE, 18,
                              anchor_x="right", anchor_y="top")
             arcade.draw_text("Schießen = Leertaste",
-                             self.width - 20, self.height - 90,
+                             self.width - 20, self.height - 150,
                              arcade.color.WHITE, 18,
                              anchor_x="right", anchor_y="top")
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
-                                 self.width - 20, self.height - 40,
+                                 self.width - 20, self.height - 230,
                                  arcade.color.RED, 34,
-                                 anchor_x="right")
+                                 anchor_x="right", anchor_y="top")
             else:
                 arcade.draw_text("Vorbereitung",
-                                 self.width - 20, self.height - 40,
+                                 self.width - 20, self.height - 230,
                                  arcade.color.GREEN, 34,
-                                 anchor_x="right")
+                                 anchor_x="right", anchor_y="top")
 
             if self.wave_message:
                 arcade.draw_text(self.wave_message,
