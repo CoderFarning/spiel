@@ -255,20 +255,20 @@ class SurvivalGame(arcade.Window):
         self.shots_left -= hits
 
     def get_wave_button_rect(self):
-        return (20, 20, 250, 50)
+        return (20, 20, 280, 60)
 
     def get_shop_leave_button_rect(self):
         text_obj = arcade.Text(self.shop_leave_label, 0, 0, arcade.color.WHITE, 26, anchor_x="center", anchor_y="center")
-        bw = text_obj.content_width + 90
-        bh = text_obj.content_height + 30
+        bw = text_obj.content_width + 120
+        bh = text_obj.content_height + 40
         bx = self.width / 2 - bw / 2
         by = 120
         return (bx, by, bw, bh)
 
     def get_shop_buy_one_button_rect(self):
         text_obj = arcade.Text(self.shop_buy_one_label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
-        bw = text_obj.content_width + 60
-        bh = text_obj.content_height + 26
+        bw = text_obj.content_width + 80
+        bh = text_obj.content_height + 32
         bx = self.width / 2 - bw / 2
         by = self.height - 400
         return (bx, by, bw, bh)
@@ -298,17 +298,18 @@ class SurvivalGame(arcade.Window):
 
     def update_ui_rects(self):
         # Menu
-        bw, bh = 300, 80
+        bw, bh = 340, 90
         bx = self.width // 2 - bw // 2
         by = self.height // 2 - bh // 2
         self.ui_rects["start_button"] = (bx, by, bw, bh)
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
-        self.ui_rects["info_button"] = (self.width - 70, self.height - 70, 50, 50)
+        # Info-Button direkt unter der Wellenanzeige oben rechts
+        self.ui_rects["info_button"] = (self.width - 80, self.height - 120, 60, 60)
 
         # Info overlay
-        self.ui_rects["info_back"] = (self.width / 2 - 160, 120, 320, 70)
+        self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
 
         # Shop
         self.ui_rects["shop_buy_one"] = self.get_shop_buy_one_button_rect()
@@ -515,12 +516,12 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 20)
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
-                                 self.width - 80, self.height - 15,
+                                 self.width - 10, self.height - 15,
                                  arcade.color.RED, 34,
                                  anchor_x="right", anchor_y="top")
             else:
                 arcade.draw_text("Vorbereitung",
-                                 self.width - 80, self.height - 15,
+                                 self.width - 10, self.height - 15,
                                  arcade.color.GREEN, 34,
                                  anchor_x="right", anchor_y="top")
 
@@ -603,8 +604,8 @@ class SurvivalGame(arcade.Window):
             bx, by, bw, bh = self.ui_rects["info_back"]
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.GRAY)
             arcade.draw_text("Zurück",
-                             self.width / 2, by + bh / 2,
-                             arcade.color.WHITE, 30,
+                             bx + bw / 2, by + bh / 2,
+                             arcade.color.WHITE, 28,
                              anchor_x="center", anchor_y="center")
 
         elif self.state == "shop":
