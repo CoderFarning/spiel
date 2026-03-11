@@ -306,7 +306,7 @@ class SurvivalGame(arcade.Window):
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
         # Info-Button direkt unter der Wellenanzeige oben rechts
-        self.ui_rects["info_button"] = (self.width - 80, self.height - 120, 60, 60)
+        self.ui_rects["info_button"] = (self.width - 80, self.height - 125, 60, 60)
 
         # Info overlay
         self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
