@@ -76,6 +76,10 @@ class SurvivalGame(arcade.Window):
         self.bg_sound = arcade.load_sound("hintergrund.wav")
         self.bg_player = None
         try:
+            self.shop_sound = arcade.load_sound("shopsound.wav")
+        except Exception:
+            self.shop_sound = None
+        try:
             self.info_sprite = arcade.Sprite("info.png", scale=1.0)
             self.info_sprite_list = arcade.SpriteList()
             self.info_sprite_list.append(self.info_sprite)
@@ -219,6 +223,7 @@ class SurvivalGame(arcade.Window):
                 return
 
         elif self.state == "shop":
+            self.compute_shop_rects()
             bx, by, bw, bh = self.ui_rects["shop_leave"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.leave_shop()
@@ -341,6 +346,27 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["shop_leave"] = self.get_shop_leave_button_rect()
         self._ui_dirty = False
 
+    def compute_shop_rects(self):
+        buy_one_label = self.shop_buy_one_label
+        txt = arcade.Text(buy_one_label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
+        bw = txt.content_width + 100
+        bh = txt.content_height + 42
+        bx = self.width / 2 - bw / 2
+        by = self.height - 400
+        self.ui_rects["shop_buy_one"] = (bx, by, bw, bh)
+
+        missing_energy = max(0, 100 - int(self.energy))
+        energy_cost = missing_energy * 25
+        energy_label = f"⚡ Energie auffüllen   Preis: {energy_cost}"
+        txt2 = arcade.Text(energy_label, 0, 0, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
+        bw2 = txt2.content_width + 100
+        bh2 = txt2.content_height + 42
+        bx2 = self.width / 2 - bw2 / 2
+        by2 = self.height - 480
+        self.ui_rects["shop_energy"] = (bx2, by2, bw2, bh2)
+
+        self.ui_rects["shop_leave"] = self.get_shop_leave_button_rect()
+
     def on_resize(self, width, height):
         super().on_resize(width, height)
         self._ui_dirty = True
@@ -400,6 +426,8 @@ class SurvivalGame(arcade.Window):
         if not self.wave_active and self.portal_cooldown_timer <= 0:
             portal_distance = math.hypot(self.player.center_x - self.portal_x, self.player.center_y - self.portal_y)
             if portal_distance <= PORTAL_RADIUS:
+                if self.shop_sound:
+                    arcade.play_sound(self.shop_sound)
                 self.state = "shop"
                 return
 
@@ -634,6 +662,7 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center", anchor_y="center")
 
         elif self.state == "shop":
+            self.compute_shop_rects()
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, arcade.color.DARK_BLUE_GRAY)
             arcade.draw_text("SHOP",
                              self.width / 2, self.height - 120,
@@ -647,12 +676,22 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 260,
                              arcade.color.WHITE, 26,
                              anchor_x="center")
-            bx, by, bw, bh = self.get_shop_buy_one_button_rect()
             bx, by, bw, bh = self.ui_rects["shop_buy_one"]
             can_buy_one = self.total_coins >= AMMO_COST
             one_color = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
             arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, one_color)
             arcade.draw_text(self.shop_buy_one_label,
+                             self.width / 2, by + bh / 2,
+                             arcade.color.WHITE, 24,
+                             anchor_x="center", anchor_y="center")
+
+            bx, by, bw, bh = self.ui_rects["shop_energy"]
+            missing_energy = max(0, 100 - int(self.energy))
+            energy_cost = missing_energy * 25
+            can_buy_energy = self.total_coins >= energy_cost and missing_energy > 0
+            energy_color = arcade.color.DARK_SPRING_GREEN if can_buy_energy else arcade.color.RED
+            arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, energy_color)
+            arcade.draw_text(f"⚡ Energie auffüllen   Preis: {energy_cost}",
                              self.width / 2, by + bh / 2,
                              arcade.color.WHITE, 24,
                              anchor_x="center", anchor_y="center")
