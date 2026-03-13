@@ -1,0 +1,29 @@
+from pathlib import Path
+
+# ---------------- SETTINGS ----------------
+SCREEN_TITLE = "Survival Map"
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+MAP_WIDTH = 10000
+MAP_HEIGHT = 10000
+# Assets liegen jetzt im selben Ordner wie diese Datei (/geheim)
+ASSET_BASE = Path(__file__).resolve().parent
+IMG_DIR = ASSET_BASE / "Bilder"
+SOUND_DIR = ASSET_BASE / "Sounds"
+
+PLAYER_WIDTH = 300
+PLAYER_HEIGHT = 168
+PLAYER_SPEED = 15
+
+SPAWN_INTERVAL = 2.0
+WAVE_DURATION = 30
+
+ENEMY_SPEED = 5
+MINIMAP_SCALE = 0.05
+
+SHOT_RADIUS = 500
+MAX_SHOTS = 30.0
+EXPLOSION_DURATION = 0.25
+PORTAL_RADIUS = 140
+PORTAL_COOLDOWN = 0.4
+AMMO_COST = 2
