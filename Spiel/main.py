@@ -9,8 +9,7 @@ GEHEIM_DIR = BASE_DIR / "geheim"
 if str(GEHEIM_DIR) not in sys.path:
     sys.path.insert(0, str(GEHEIM_DIR))
 
-from game import SurvivalGame
-
+from game import SurvivalGame # type: ignore
 
 def main():
     _game = SurvivalGame()

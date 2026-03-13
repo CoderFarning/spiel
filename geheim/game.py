@@ -118,13 +118,24 @@ class SurvivalGame(arcade.Window):
         self.enemies = arcade.SpriteList()
         self.spawner_list = arcade.SpriteList()
         self.portal_list = arcade.SpriteList()
+        self.decor_list = arcade.SpriteList()
+
+        # Haus in der Mitte
+        try:
+            self.house_sprite = arcade.Sprite(str(IMG_DIR / "Haus.png"), scale=2.0)
+        except Exception:
+            self.house_sprite = arcade.Sprite(center_x=0, center_y=0)
+        self.house_sprite.center_x = 0
+        self.house_sprite.center_y = 0
+        self.decor_list.append(self.house_sprite)
 
         self.player = arcade.Sprite(str(IMG_DIR / "spieler.png"))
         self.player.width = PLAYER_WIDTH
         self.player.height = PLAYER_HEIGHT
-        self.player.center_x = 0
-        self.player.center_y = 0
+        self.player.center_x = self.house_sprite.center_x
+        self.player.center_y = self.house_sprite.center_y - 200  # 10 Blöcke unter dem Haus
         self.player_list.append(self.player)
+        self.prev_player_pos = (self.player.center_x, self.player.center_y)
 
         self.player_health = 100
         self.shots_left = MAX_SHOTS
@@ -678,6 +689,7 @@ class SurvivalGame(arcade.Window):
                 self.auto_shot_cooldown = 0.4
 
         # Movement
+        self.prev_player_pos = (self.player.center_x, self.player.center_y)
         self.player.change_x = 0
         self.player.change_y = 0
         shift_down = arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys
@@ -694,6 +706,7 @@ class SurvivalGame(arcade.Window):
 
         self.player.center_x += self.player.change_x
         self.player.center_y += self.player.change_y
+        # Haus nicht blockierend (Betreten möglich) – keine Kollision
 
         moving = self.player.change_x != 0 or self.player.change_y != 0
         if shift_down and moving and self.energy > 0:
@@ -836,8 +849,12 @@ class SurvivalGame(arcade.Window):
         elif self.state == "game":
 
             with self.camera.activate():
+                # Welten-Barriere (rot)
+                arcade.draw_lbwh_rectangle_outline(-MAP_WIDTH/2, -MAP_HEIGHT/2, MAP_WIDTH, MAP_HEIGHT,
+                                                   arcade.color.RED, border_width=6)
                 if not self.wave_active:
                     self.portal_list.draw()
+                self.decor_list.draw()
                 self.enemies.draw()
                 self.player_list.draw()
                 # Markiere Gegner im Radius
@@ -943,6 +960,9 @@ class SurvivalGame(arcade.Window):
                 arcade.draw_lbwh_rectangle_filled(minimap_x, minimap_y,
                                                   minimap_w, minimap_h,
                                                   arcade.color.DARK_SLATE_GRAY)
+                arcade.draw_lbwh_rectangle_outline(minimap_x, minimap_y,
+                                                   minimap_w, minimap_h,
+                                                   arcade.color.RED, border_width=2)
 
                 px = minimap_x + (self.player.center_x + MAP_WIDTH/2) * MINIMAP_SCALE
                 py = minimap_y + (self.player.center_y + MAP_HEIGHT/2) * MINIMAP_SCALE
@@ -957,6 +977,13 @@ class SurvivalGame(arcade.Window):
                     sx = minimap_x + (spawner[0] + MAP_WIDTH/2) * MINIMAP_SCALE
                     sy = minimap_y + (spawner[1] + MAP_HEIGHT/2) * MINIMAP_SCALE
                     arcade.draw_circle_filled(sx, sy, 5, arcade.color.YELLOW)
+
+                # Haus auf Minimap (braunes Rectangle-Outline)
+                hx = minimap_x + (self.house_sprite.center_x + MAP_WIDTH/2) * MINIMAP_SCALE
+                hy = minimap_y + (self.house_sprite.center_y + MAP_HEIGHT/2) * MINIMAP_SCALE
+                h_w = self.house_sprite.width * MINIMAP_SCALE
+                h_h = self.house_sprite.height * MINIMAP_SCALE
+                arcade.draw_lbwh_rectangle_outline(hx - h_w/2, hy - h_h/2, h_w, h_h, arcade.color.BROWN_NOSE, border_width=2)
 
                 if not self.wave_active:
                     px2 = minimap_x + (self.portal_x + MAP_WIDTH/2) * MINIMAP_SCALE
