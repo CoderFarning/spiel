@@ -213,6 +213,8 @@ class SurvivalGame(arcade.Window):
                 self.radius_shot()
             if key == arcade.key.M:
                 self.show_minimap = not self.show_minimap
+            if key == arcade.key.KEY_1:
+                self.weapon_equipped = not self.weapon_equipped
         elif self.state == "info":
             if key == arcade.key.ESCAPE:
                 self.state = "game"
@@ -602,8 +604,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 85.0      # Federkonstante
-        d = 18.0      # Dämpfung
+        k = 110.0      # Federkonstante
+        d = 22.0       # Dämpfung
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -927,7 +929,7 @@ class SurvivalGame(arcade.Window):
                 if not self.house_destroyed:
                     ratio = self.house_health / self.house_health_max
                     arcade.draw_lbwh_rectangle_filled(hx - bar_w/2, hy - bar_h/2, bar_w, bar_h, arcade.color.DARK_RED)
-                    arcade.draw_lbwh_rectangle_filled(hx - bar_w/2, hy - bar_h/2, bar_w * ratio, bar_h, arcade.color.DARK_GREEN)
+                    arcade.draw_lbwh_rectangle_filled(hx - bar_w/2, hy - bar_h/2, bar_w * ratio, bar_h, arcade.color.SPRING_GREEN)
                     arcade.draw_lbwh_rectangle_outline(hx - bar_w/2, hy - bar_h/2, bar_w, bar_h, arcade.color.BLACK, border_width=2)
                     arcade.draw_text(f"Haus: {self.house_health}/{self.house_health_max}", hx, hy,
                                      arcade.color.WHITE, 14, anchor_x="center", anchor_y="center")
@@ -967,6 +969,16 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
+            # Waffen-Slot unten links
+            slot_w, slot_h = 120, 120
+            slot_x, slot_y = 20, 20
+            slot_color = arcade.color.GOLD if self.weapon_equipped else arcade.color.GRAY
+            arcade.draw_lbwh_rectangle_outline(slot_x, slot_y, slot_w, slot_h, slot_color, border_width=4)
+            arcade.draw_text("1", slot_x + slot_w/2, slot_y + slot_h - 22, arcade.color.WHITE, 22, anchor_x="center")
+            if self.pistol_texture:
+                tex_w = self.pistol_texture.width * 0.6
+                tex_h = self.pistol_texture.height * 0.6
+                arcade.draw_lrwh_rectangle_textured(slot_x + 10, slot_y + 10, tex_w, tex_h, self.pistol_texture)
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
                                  self.width - 10, self.height - 15,
