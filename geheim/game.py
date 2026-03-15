@@ -47,7 +47,6 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_owned = False
         self.auto_shot_cooldown = 0.0
         self.auto_shot_waves_left = 0
-        self.click_block_timer = 0.0
         self.player_name = ""
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = arcade.load_texture(str(IMG_DIR / "bullet.png"))
@@ -228,8 +227,6 @@ class SurvivalGame(arcade.Window):
         self.ensure_ui_rects()
 
     def on_mouse_press(self, x, y, button, modifiers):
-        if self.click_block_timer > 0:
-            return
         self.ensure_ui_rects()
         self.mouse_x = x
         self.mouse_y = y
@@ -240,14 +237,12 @@ class SurvivalGame(arcade.Window):
                 self.setup_game()
                 self.state = "game"
                 self.start_prep()
-                self.click_block_timer = 0.2
                 return
 
         elif self.state == "game":
             bx, by, bw, bh = self.ui_rects["info_button"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.state = "info"
-                self.click_block_timer = 0.2
                 return
 
             bx, by, bw, bh = self.ui_rects["settings_button"]
@@ -257,7 +252,6 @@ class SurvivalGame(arcade.Window):
                 self.admin_focus = False
                 self.admin_message = ""
                 self.admin_message_timer = 0.0
-                self.click_block_timer = 0.2
                 return
 
             bx, by, bw, bh = self.ui_rects["wave_button"]
@@ -281,7 +275,6 @@ class SurvivalGame(arcade.Window):
                     self.wave_reward_coins = 0
                     self.stop_prep()
                     self.start_bg()
-                    self.click_block_timer = 0.2
                     if self.auto_shot_owned and self.auto_shot_waves_left <= 0:
                         self.auto_shot_owned = False
                 return
@@ -294,7 +287,6 @@ class SurvivalGame(arcade.Window):
             bx, by, bw, bh = self.ui_rects["info_back"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.state = "game"
-                self.click_block_timer = 0.2
                 return
 
         elif self.state == "settings":
@@ -309,54 +301,45 @@ class SurvivalGame(arcade.Window):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.state = "game"
                 self.admin_focus = False
-                self.click_block_timer = 0.2
                 return
 
             if self.settings_unlocked:
                 bx, by, bw, bh = self.ui_rects["settings_ammo"]
                 if bx <= x <= bx + bw and by <= y <= by + bh:
                     self.shots_left = 1_000_000
-                    self.click_block_timer = 0.2
                     return
                 bx, by, bw, bh = self.ui_rects["settings_health"]
                 if bx <= x <= bx + bw and by <= y <= by + bh:
                     self.player_health = 1_000_000
-                    self.click_block_timer = 0.2
                     return
                 bx, by, bw, bh = self.ui_rects["settings_energy"]
                 if bx <= x <= bx + bw and by <= y <= by + bh:
                     self.energy = 100.0
-                    self.click_block_timer = 0.2
                     return
                 bx, by, bw, bh = self.ui_rects["settings_coins"]
                 if bx <= x <= bx + bw and by <= y <= by + bh:
                     self.total_coins = 1_000_000
-                    self.click_block_timer = 0.2
                     return
 
         elif self.state == "shop":
             bx, by, bw, bh = self.ui_rects["shop_leave"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.leave_shop()
-                self.click_block_timer = 0.2
                 return
 
             bx, by, bw, bh = self.ui_rects["shop_buy_one"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_ammo(1)
-                self.click_block_timer = 0.2
                 return
 
             bx, by, bw, bh = self.ui_rects["shop_energy"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_energy()
-                self.click_block_timer = 0.2
                 return
 
             bx, by, bw, bh = self.ui_rects["shop_auto"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.buy_auto_shot()
-                self.click_block_timer = 0.2
                 return
 
         elif self.state == "gameover":
@@ -642,11 +625,6 @@ class SurvivalGame(arcade.Window):
             self.auto_shot_cooldown -= delta_time
             if self.auto_shot_cooldown < 0:
                 self.auto_shot_cooldown = 0.0
-        if self.click_block_timer > 0:
-            self.click_block_timer -= delta_time
-            if self.click_block_timer < 0:
-                self.click_block_timer = 0.0
-
     def on_resize(self, width, height):
         super().on_resize(width, height)
         self._ui_dirty = True
@@ -904,19 +882,6 @@ class SurvivalGame(arcade.Window):
                              self.width/2, self.height/2+150,
                              arcade.color.WHITE, 60,
                              anchor_x="center")
-            # Name-Eingabe
-            name_box_w = 520
-            name_box_h = 60
-            name_box_x = self.width/2 - name_box_w/2
-            name_box_y = self.height/2 + 60
-            arcade.draw_text("Name:", name_box_x, name_box_y + 70, arcade.color.WHITE, 24)
-            arcade.draw_lbwh_rectangle_outline(name_box_x, name_box_y, name_box_w, name_box_h, arcade.color.WHITE, border_width=3)
-            caret = "|" if self.caret_visible else ""
-            arcade.draw_text(self.player_name + caret,
-                             name_box_x + 10, name_box_y + name_box_h/2,
-                             arcade.color.WHITE, 26,
-                             anchor_y="center")
-
             bx, by, bw, bh = self.ui_rects["start_button"]
 
             level = self.ease(self.hover_level.get("start_button", 0.0))
@@ -931,9 +896,10 @@ class SurvivalGame(arcade.Window):
             field_w = 520
             field_h = 60
             field_x = self.width/2 - field_w/2
-            field_y = self.height/2 - 120
+            field_y = self.height/2 - 200
             arcade.draw_text("Name:", field_x, field_y + field_h + 10, arcade.color.WHITE, 24)
             arcade.draw_lbwh_rectangle_outline(field_x, field_y, field_w, field_h, arcade.color.WHITE, border_width=3)
+            caret = "|" if self.caret_visible else ""
             arcade.draw_text(self.player_name + caret,
                              field_x + 10, field_y + field_h/2,
                              arcade.color.WHITE, 26,
