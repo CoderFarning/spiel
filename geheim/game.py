@@ -516,7 +516,7 @@ class SurvivalGame(arcade.Window):
     def draw_scaled_rect(bx, by, bw, bh, color, level, scale_factor=0.08):
         e = SurvivalGame.ease(level)
         # zusätzliches sanftes Overshoot für lebendige Buttons
-        overshoot = 0.03 * e
+        overshoot = 0.04 * e
         scale = 1.0 + scale_factor * e + overshoot
         cx = bx + bw / 2
         cy = by + bh / 2
@@ -617,8 +617,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 60.0      # Federkonstante
-        d = 12.0      # Dämpfung
+        k = 85.0      # Federkonstante
+        d = 18.0      # Dämpfung
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
