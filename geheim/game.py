@@ -50,6 +50,8 @@ class SurvivalGame(arcade.Window):
         self.player_name = ""
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = arcade.load_texture(str(IMG_DIR / "bullet.png"))
+        self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
+        self.weapon_equipped = False
 
         self.player_health = 1_000_000
         self.shots_left = MAX_SHOTS
@@ -648,6 +650,8 @@ class SurvivalGame(arcade.Window):
         return wx, wy
 
     def fire_bullet(self, screen_x, screen_y):
+        if not self.weapon_equipped:
+            return
         if self.shots_left <= 0:
             return
         wx, wy = self.screen_to_world(screen_x, screen_y)
@@ -660,11 +664,11 @@ class SurvivalGame(arcade.Window):
         dir_y = dy / dist
         bullet = arcade.Sprite(center_x=self.player.center_x, center_y=self.player.center_y)
         bullet.texture = self.bullet_texture
-        bullet.width = self.bullet_texture.width
-        bullet.height = self.bullet_texture.height
-        bullet.change_x = dir_x * 5
-        bullet.change_y = dir_y * 5
-        bullet.life_time = 0.5
+        bullet.width = self.bullet_texture.width * 0.6
+        bullet.height = self.bullet_texture.height * 0.6
+        bullet.change_x = dir_x * 20
+        bullet.change_y = dir_y * 20
+        bullet.life_time = 0.6
         bullet.angle = math.degrees(math.atan2(dir_y, dir_x))
         self.bullet_list.append(bullet)
         self.shots_left -= 1
