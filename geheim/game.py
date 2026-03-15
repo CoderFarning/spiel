@@ -48,8 +48,11 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_cooldown = 0.0
         self.auto_shot_waves_left = 0
         self.click_block_timer = 0.0
+        self.player_name = ""
+        self.bullet_list = arcade.SpriteList()
+        self.bullet_texture = arcade.load_texture(str(IMG_DIR / "bullet.png"))
 
-        self.player_health = 100
+        self.player_health = 1_000_000
         self.shots_left = MAX_SHOTS
         self.energy = 100.0
         self.sprint_drain_acc = 0.0
@@ -137,7 +140,7 @@ class SurvivalGame(arcade.Window):
         self.player_list.append(self.player)
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
 
-        self.player_health = 100
+        self.player_health = 1_000_000
         self.shots_left = MAX_SHOTS
         self.energy = 100.0
         self.sprint_drain_acc = 0.0
@@ -156,6 +159,9 @@ class SurvivalGame(arcade.Window):
             (-MAP_WIDTH//2, MAP_HEIGHT//2),
             (MAP_WIDTH//2, MAP_HEIGHT//2)
         ]
+        self.house_health_max = 100
+        self.house_health = self.house_health_max
+        self.house_destroyed = False
 
         self.wave_active = False
         self.wave_timer = 0
@@ -196,6 +202,10 @@ class SurvivalGame(arcade.Window):
                 return
             if key == arcade.key.BACKSPACE:
                 self.admin_input = self.admin_input[:-1]
+                return
+        if self.state == "menu":
+            if key == arcade.key.BACKSPACE:
+                self.player_name = self.player_name[:-1]
                 return
         if self.state == "game":
             if key == arcade.key.SPACE and self.shots_left > 0:
@@ -276,6 +286,10 @@ class SurvivalGame(arcade.Window):
                         self.auto_shot_owned = False
                 return
 
+            if button == arcade.MOUSE_BUTTON_LEFT:
+                self.fire_bullet(x, y)
+                return
+
         elif self.state == "info":
             bx, by, bw, bh = self.ui_rects["info_back"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
@@ -354,6 +368,10 @@ class SurvivalGame(arcade.Window):
         if self.state == "settings" and self.admin_focus:
             if text and text.isprintable():
                 self.admin_input += text
+        if self.state == "menu":
+            if text and text.isprintable():
+                if len(self.player_name) < 16:
+                    self.player_name += text
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -645,6 +663,34 @@ class SurvivalGame(arcade.Window):
         if not self.wave_active:
             self.start_prep()
 
+    def screen_to_world(self, x, y):
+        cx, cy = self.camera.position
+        wx = x - self.width / 2 + cx
+        wy = y - self.height / 2 + cy
+        return wx, wy
+
+    def fire_bullet(self, screen_x, screen_y):
+        if self.shots_left <= 0:
+            return
+        wx, wy = self.screen_to_world(screen_x, screen_y)
+        dx = wx - self.player.center_x
+        dy = wy - self.player.center_y
+        dist = math.hypot(dx, dy)
+        if dist == 0:
+            return
+        dir_x = dx / dist
+        dir_y = dy / dist
+        bullet = arcade.Sprite(center_x=self.player.center_x, center_y=self.player.center_y)
+        bullet.texture = self.bullet_texture
+        bullet.width = self.bullet_texture.width
+        bullet.height = self.bullet_texture.height
+        bullet.change_x = dir_x * 5
+        bullet.change_y = dir_y * 5
+        bullet.life_time = 0.5
+        bullet.angle = math.degrees(math.atan2(dir_y, dir_x))
+        self.bullet_list.append(bullet)
+        self.shots_left -= 1
+
     def on_close(self):
         self.stop_bg()
         self.stop_shop_sound()
@@ -688,6 +734,25 @@ class SurvivalGame(arcade.Window):
                 self.radius_shot()
                 self.auto_shot_cooldown = 0.4
 
+        # Bullets bewegen und Lebensdauer prüfen
+        for bullet in list(self.bullet_list):
+            bullet.center_x += bullet.change_x
+            bullet.center_y += bullet.change_y
+            bullet.life_time -= delta_time
+            if bullet.life_time <= 0:
+                bullet.kill()
+                continue
+            hits = arcade.check_for_collision_with_list(bullet, self.enemies)
+            for enemy in hits:
+                if enemy.is_dying:
+                    continue
+                enemy.is_dying = True
+                enemy.death_timer = EXPLOSION_DURATION
+                enemy.texture = arcade.load_texture(str(IMG_DIR / "explosion.png"))
+                bullet.kill()
+                self.wave_kills += 1
+                break
+
         # Movement
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
         self.player.change_x = 0
@@ -706,7 +771,9 @@ class SurvivalGame(arcade.Window):
 
         self.player.center_x += self.player.change_x
         self.player.center_y += self.player.change_y
-        # Haus nicht blockierend (Betreten möglich) – keine Kollision
+        # Haus regeneriert Spieler
+        if arcade.check_for_collision(self.player, self.house_sprite):
+            self.player_health = 1_000_000
 
         moving = self.player.change_x != 0 or self.player.change_y != 0
         if shift_down and moving and self.energy > 0:
@@ -734,13 +801,7 @@ class SurvivalGame(arcade.Window):
                 self.portal_cooldown_timer = 0.0
 
         if not self.wave_active and self.portal_cooldown_timer <= 0:
-            portal_distance = math.hypot(self.player.center_x - self.portal_x, self.player.center_y - self.portal_y)
-            if portal_distance <= PORTAL_RADIUS:
-                self.stop_prep()
-                self.start_shop_sound()
-                self.compute_shop_rects()
-                self.state = "shop"
-                return
+            pass
 
         # Wave System
         if self.wave_message_timer > 0:
@@ -788,8 +849,10 @@ class SurvivalGame(arcade.Window):
                     enemy.kill()
                 continue
 
-            dx = self.player.center_x - enemy.center_x
-            dy = self.player.center_y - enemy.center_y
+            target_x = self.house_sprite.center_x if not self.house_destroyed else self.player.center_x
+            target_y = self.house_sprite.center_y if not self.house_destroyed else self.player.center_y
+            dx = target_x - enemy.center_x
+            dy = target_y - enemy.center_y
             dist = math.hypot(dx, dy)
 
             if dist > 0:
@@ -798,6 +861,13 @@ class SurvivalGame(arcade.Window):
 
             enemy.center_x = max(-MAP_WIDTH//2, min(MAP_WIDTH//2, enemy.center_x))
             enemy.center_y = max(-MAP_HEIGHT//2, min(MAP_HEIGHT//2, enemy.center_y))
+
+            if not self.house_destroyed and arcade.check_for_collision(enemy, self.house_sprite):
+                enemy.kill()
+                self.house_health = max(0, self.house_health - 1)
+                if self.house_health <= 0:
+                    self.house_destroyed = True
+                continue
 
             if arcade.check_for_collision(enemy, self.player):
                 enemy.kill()
@@ -834,6 +904,18 @@ class SurvivalGame(arcade.Window):
                              self.width/2, self.height/2+150,
                              arcade.color.WHITE, 60,
                              anchor_x="center")
+            # Name-Eingabe
+            name_box_w = 520
+            name_box_h = 60
+            name_box_x = self.width/2 - name_box_w/2
+            name_box_y = self.height/2 + 60
+            arcade.draw_text("Name:", name_box_x, name_box_y + 70, arcade.color.WHITE, 24)
+            arcade.draw_lbwh_rectangle_outline(name_box_x, name_box_y, name_box_w, name_box_h, arcade.color.WHITE, border_width=3)
+            caret = "|" if self.caret_visible else ""
+            arcade.draw_text(self.player_name + caret,
+                             name_box_x + 10, name_box_y + name_box_h/2,
+                             arcade.color.WHITE, 26,
+                             anchor_y="center")
 
             bx, by, bw, bh = self.ui_rects["start_button"]
 
@@ -845,6 +927,17 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 30,
                              anchor_x="center", anchor_y="center")
             self.start_button = (bx, by, bw, bh)
+            # Name-Feld unter START
+            field_w = 520
+            field_h = 60
+            field_x = self.width/2 - field_w/2
+            field_y = self.height/2 - 120
+            arcade.draw_text("Name:", field_x, field_y + field_h + 10, arcade.color.WHITE, 24)
+            arcade.draw_lbwh_rectangle_outline(field_x, field_y, field_w, field_h, arcade.color.WHITE, border_width=3)
+            arcade.draw_text(self.player_name + caret,
+                             field_x + 10, field_y + field_h/2,
+                             arcade.color.WHITE, 26,
+                             anchor_y="center")
 
         elif self.state == "game":
 
@@ -852,11 +945,24 @@ class SurvivalGame(arcade.Window):
                 # Welten-Barriere (rot)
                 arcade.draw_lbwh_rectangle_outline(-MAP_WIDTH/2, -MAP_HEIGHT/2, MAP_WIDTH, MAP_HEIGHT,
                                                    arcade.color.RED, border_width=6)
-                if not self.wave_active:
-                    self.portal_list.draw()
                 self.decor_list.draw()
                 self.enemies.draw()
+                self.bullet_list.draw()
                 self.player_list.draw()
+                # Haus-Lebensleiste
+                bar_w = 220
+                bar_h = 18
+                hx = self.house_sprite.center_x
+                hy = self.house_sprite.center_y + (self.house_sprite.height / 2) + 35
+                if not self.house_destroyed:
+                    ratio = self.house_health / self.house_health_max
+                    arcade.draw_lbwh_rectangle_filled(hx - bar_w/2, hy - bar_h/2, bar_w, bar_h, arcade.color.DARK_RED)
+                    arcade.draw_lbwh_rectangle_filled(hx - bar_w/2, hy - bar_h/2, bar_w * ratio, bar_h, arcade.color.DARK_GREEN)
+                    arcade.draw_lbwh_rectangle_outline(hx - bar_w/2, hy - bar_h/2, bar_w, bar_h, arcade.color.BLACK, border_width=2)
+                    arcade.draw_text(f"Haus: {self.house_health}/{self.house_health_max}", hx, hy,
+                                     arcade.color.WHITE, 14, anchor_x="center", anchor_y="center")
+                else:
+                    arcade.draw_text("Haus zerstört", hx, hy + 10, arcade.color.RED, 18, anchor_x="center")
                 # Markiere Gegner im Radius
                 for enemy in self.enemies:
                     if enemy.is_dying:
@@ -867,12 +973,6 @@ class SurvivalGame(arcade.Window):
                         arcade.draw_text("+", enemy.center_x, enemy.center_y,
                                          arcade.color.RED, 24,
                                          anchor_x="center", anchor_y="center")
-
-                if not self.wave_active:
-                    arcade.draw_text("Shop im Portal",
-                                     self.portal_x, self.portal_y - 190,
-                                     arcade.color.WHITE, 22,
-                                     anchor_x="center")
 
             # Wave Button
             bx, by, bw, bh = self.ui_rects["wave_button"]
@@ -890,19 +990,13 @@ class SurvivalGame(arcade.Window):
             # Anzeigen
             hud_left_x = 20
             hud_left_y = self.height - 40
-            hud_left_gap = 55
-            arcade.draw_text(f"❤️ Leben: {self.player_health}",
+            name_text = self.player_name if self.player_name else "Spieler"
+            arcade.draw_text(f"Name: {name_text}",
                              hud_left_x, hud_left_y,
                              arcade.color.WHITE, 20)
-            arcade.draw_text(f"🔫 Schüsse: {int(self.shots_left)}",
-                             hud_left_x, hud_left_y - hud_left_gap,
-                             arcade.color.WHITE, 20)
-            arcade.draw_text(f"⚡ Energie: {int(self.energy)}%",
-                             hud_left_x, hud_left_y - hud_left_gap * 2,
-                             arcade.color.WHITE, 20)
-            arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
-                             hud_left_x, hud_left_y - hud_left_gap * 3,
-                             arcade.color.WHITE, 20)
+            arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
+                             hud_left_x, hud_left_y - 40,
+                             arcade.color.GREEN, 20)
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
                                  self.width - 10, self.height - 15,
@@ -984,11 +1078,6 @@ class SurvivalGame(arcade.Window):
                 h_w = self.house_sprite.width * MINIMAP_SCALE
                 h_h = self.house_sprite.height * MINIMAP_SCALE
                 arcade.draw_lbwh_rectangle_outline(hx - h_w/2, hy - h_h/2, h_w, h_h, arcade.color.BROWN_NOSE, border_width=2)
-
-                if not self.wave_active:
-                    px2 = minimap_x + (self.portal_x + MAP_WIDTH/2) * MINIMAP_SCALE
-                    py2 = minimap_y + (self.portal_y + MAP_HEIGHT/2) * MINIMAP_SCALE
-                    arcade.draw_circle_filled(px2, py2, 5, arcade.color.DARK_BLUE)
 
         elif self.state == "info":
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, (0, 0, 0, 200))
@@ -1090,71 +1179,8 @@ class SurvivalGame(arcade.Window):
                                  anchor_x="center")
 
         elif self.state == "shop":
-            self.compute_shop_rects()
-            arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, arcade.color.DARK_BLUE_GRAY)
-            arcade.draw_text("SHOP",
-                             self.width / 2, self.height - 120,
-                             arcade.color.GOLD, 54,
-                             anchor_x="center")
-            arcade.draw_text(f"🪙 Münzen: {self.total_coins}",
-                             self.width / 2, self.height - 190,
-                             arcade.color.WHITE, 28,
-                             anchor_x="center")
-            arcade.draw_text("Willkommen im Portal-Shop",
-                             self.width / 2, self.height - 260,
-                             arcade.color.WHITE, 26,
-                             anchor_x="center")
-            bx, by, bw, bh = self.ui_rects["shop_buy_one"]
-            can_buy_one = self.total_coins >= AMMO_COST
-            lvl_buy = self.ease(self.hover_level.get("shop_buy_one", 0.0))
-            base_buy = arcade.color.DARK_SPRING_GREEN if can_buy_one else arcade.color.RED
-            hover_buy = arcade.color.SPRING_GREEN if can_buy_one else arcade.color.RED_DEVIL
-            one_color = self.lerp_color(base_buy, hover_buy, lvl_buy)
-            self.draw_scaled_rect(bx, by, bw, bh, one_color, lvl_buy, scale_factor=0.15)
-            arcade.draw_text(self.shop_buy_one_label,
-                             self.width / 2, by + bh / 2,
-                             arcade.color.WHITE, 24,
-                             anchor_x="center", anchor_y="center")
-
-            bx, by, bw, bh = self.ui_rects["shop_energy"]
-            missing_energy = max(0, 100 - int(self.energy))
-            energy_cost = min(5, missing_energy) * 5
-            can_buy_energy = self.total_coins >= energy_cost and missing_energy > 0
-            lvl_energy = self.ease(self.hover_level.get("shop_energy", 0.0))
-            base_energy = arcade.color.DARK_SPRING_GREEN if can_buy_energy else arcade.color.RED
-            hover_energy = arcade.color.SPRING_GREEN if can_buy_energy else arcade.color.RED_DEVIL
-            energy_color = self.lerp_color(base_energy, hover_energy, lvl_energy)
-            self.draw_scaled_rect(bx, by, bw, bh, energy_color, lvl_energy, scale_factor=0.15)
-            arcade.draw_text(f"⚡ Energie +5%   Preis: {energy_cost}",
-                             self.width / 2, by + bh / 2,
-                             arcade.color.WHITE, 24,
-                             anchor_x="center", anchor_y="center")
-
-            if not self.auto_shot_owned:
-                bx, by, bw, bh = self.ui_rects["shop_auto"]
-                lvl_auto = self.ease(self.hover_level.get("shop_auto", 0.0))
-                base_auto = arcade.color.DARK_SPRING_GREEN if self.total_coins >= 100 else arcade.color.RED
-                hover_auto = arcade.color.SPRING_GREEN if self.total_coins >= 100 else arcade.color.RED_DEVIL
-                auto_color = self.lerp_color(base_auto, hover_auto, lvl_auto)
-                self.draw_scaled_rect(bx, by, bw, bh, auto_color, lvl_auto, scale_factor=0.14)
-                arcade.draw_text("🤖 Auto-Schuss  Preis: 100",
-                                 self.width / 2, by + bh / 2,
-                                 arcade.color.WHITE, 24,
-                                 anchor_x="center", anchor_y="center")
-            else:
-                arcade.draw_text("Auto-Schuss: Aktiv",
-                                 self.width / 2, self.height - 560,
-                                 arcade.color.LIGHT_GREEN, 22,
-                                 anchor_x="center")
-
-            bx, by, bw, bh = self.ui_rects["shop_leave"]
-            lvl_leave = self.ease(self.hover_level.get("shop_leave", 0.0))
-            leave_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, lvl_leave)
-            self.draw_scaled_rect(bx, by, bw, bh, leave_color, lvl_leave, scale_factor=0.15)
-            arcade.draw_text(self.shop_leave_label,
-                             self.width / 2, by + bh / 2,
-                             arcade.color.WHITE, 26,
-                             anchor_x="center", anchor_y="center")
+            self.state = "game"
+            return
 
         elif self.state == "gameover":
 
