@@ -8,8 +8,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Höhere Update-Rate für flüssigere Eingaben/Bewegung
-        self.set_update_rate(1/240)
+        # Extrem hohe Update-Rate für maximale Eingabe-/Maus-Flüssigkeit
+        self.set_update_rate(1/480)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -62,7 +62,7 @@ class SurvivalGame(arcade.Window):
         self.wave_auto_timer = 20.0
 
         self.player_health = 1_000_000
-        self.shots_left = MAX_SHOTS
+        self.shots_left = float("inf")
         self.energy = 100.0
         self.sprint_drain_acc = 0.0
         self.last_energy_int = int(self.energy)
@@ -150,7 +150,7 @@ class SurvivalGame(arcade.Window):
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
 
         self.player_health = 1_000_000
-        self.shots_left = MAX_SHOTS
+        self.shots_left = float("inf")
         self.energy = 100.0
         self.sprint_drain_acc = 0.0
         self.last_energy_int = int(self.energy)
@@ -362,7 +362,7 @@ class SurvivalGame(arcade.Window):
                 enemies_to_kill.append((dist, enemy))
 
         enemies_to_kill.sort(key=lambda item: item[0])
-        hits = min(len(enemies_to_kill), self.shots_left)
+        hits = len(enemies_to_kill)
 
         for _, enemy in enemies_to_kill[:hits]:
             enemy.texture = arcade.load_texture(str(IMG_DIR / "explosion.png"))
@@ -370,7 +370,7 @@ class SurvivalGame(arcade.Window):
             enemy.death_timer = EXPLOSION_DURATION
             self.wave_kills += 1
             arcade.play_sound(self.hit_sound)
-        self.shots_left -= hits
+        # unendliche Munition: kein Abzug
 
     def get_wave_button_rect(self):
         return (0, 0, 0, 0)  # Wave-Button deaktiviert/unsichtbar
@@ -595,8 +595,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 420.0      # Federkonstante (sehr reaktionsschnell)
-        d = 60.0       # Dämpfung hält Bewegungen stabil
+        k = 720.0      # Federkonstante (noch direkter)
+        d = 90.0       # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -670,8 +670,7 @@ class SurvivalGame(arcade.Window):
     def fire_bullet(self, screen_x, screen_y):
         if not self.weapon_equipped:
             pass
-        if self.shots_left <= 0:
-            return
+        # unendliche Munition: keine Prüfung nötig
         wx, wy = self.screen_to_world(screen_x, screen_y)
         dx = wx - self.player.center_x
         dy = wy - self.player.center_y
@@ -680,14 +679,14 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        bullet = arcade.SpriteCircle(4.2, arcade.color.ORANGE_PEEL,
+        bullet = arcade.SpriteCircle(5.2, arcade.color.ORANGE_PEEL,
                                      center_x=self.player.center_x,
                                      center_y=self.player.center_y)
         bullet.change_x = dir_x * 5
         bullet.change_y = dir_y * 5
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
-        self.shots_left -= 1
+        # unendliche Munition: kein Abzug
 
     def on_close(self):
         self.stop_bg()
@@ -719,7 +718,7 @@ class SurvivalGame(arcade.Window):
             return
 
         # Auto-Schuss auslösen, falls gekauft
-        if self.auto_shot_owned and self.wave_active and self.shots_left > 0 and self.auto_shot_cooldown <= 0:
+        if self.auto_shot_owned and self.wave_active and self.auto_shot_cooldown <= 0:
             in_range = False
             for enemy in self.enemies:
                 if enemy.is_dying:
@@ -763,8 +762,8 @@ class SurvivalGame(arcade.Window):
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
         self.player.change_x = 0
         self.player.change_y = 0
-        shift_down = arcade.key.LSHIFT in self.keys or arcade.key.RSHIFT in self.keys
-        speed = PLAYER_SPEED + (8 if shift_down and self.energy > 0 else 0)
+        shift_down = False
+        speed = PLAYER_SPEED
 
         if arcade.key.UP in self.keys:
             self.player.change_y = speed
@@ -782,13 +781,7 @@ class SurvivalGame(arcade.Window):
             self.player_health = 1_000_000
 
         moving = self.player.change_x != 0 or self.player.change_y != 0
-        if shift_down and moving and self.energy > 0:
-            self.sprint_drain_acc += delta_time
-            while self.sprint_drain_acc >= 1.0 and self.energy > 0:
-                self.energy = max(0.0, self.energy - 1.0)
-                self.sprint_drain_acc -= 1.0
-        elif not shift_down:
-            self.sprint_drain_acc = 0.0
+        self.sprint_drain_acc = 0.0
 
         energy_int = int(self.energy)
         if energy_int != self.last_energy_int:
@@ -950,7 +943,7 @@ class SurvivalGame(arcade.Window):
                 self.decor_list.draw()
                 self.enemies.draw()
                 for bullet in self.bullet_list:
-                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 4.2, arcade.color.ORANGE_PEEL)
+                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 5.2, arcade.color.ORANGE_PEEL)
                 self.player_list.draw()
                 arcade.draw_text(self.player_name,
                                  self.player.center_x,
@@ -1047,10 +1040,7 @@ class SurvivalGame(arcade.Window):
                                  self.width / 2, self.height - 90,
                                  arcade.color.GOLD, 30,
                                  anchor_x="center")
-                arcade.draw_text(f"Du bekommst {self.wave_reward_coins} Münzen",
-                                 self.width / 2, self.height - 125,
-                                 arcade.color.YELLOW, 22,
-                                 anchor_x="center")
+                # Keine Münz-Anzeige mehr
 
             # MiniMap (M toggeln)
             if self.show_minimap:
@@ -1096,10 +1086,6 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text("Bewegung: Pfeiltasten",
                              self.width / 2, self.height - 230,
                              arcade.color.WHITE, 30,
-                             anchor_x="center")
-            arcade.draw_text("Sprint: Shift (+8 Geschwindigkeit)",
-                             self.width / 2, self.height - 280,
-                             arcade.color.WHITE, 28,
                              anchor_x="center")
             arcade.draw_text("Schießen: Mausklick (Richtung = Cursor)",
                              self.width / 2, self.height - 330,
