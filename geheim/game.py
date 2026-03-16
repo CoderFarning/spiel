@@ -8,6 +8,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
+        # Höhere Update-Rate für flüssigere Eingaben/Bewegung
+        self.set_update_rate(1/240)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -49,6 +51,7 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_waves_left = 0
         self.wave_auto_timer = 20.0
         self.player_name = ""
+        self.name_confirmed = False
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = None  # wird nicht mehr benutzt
         self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
@@ -97,12 +100,12 @@ class SurvivalGame(arcade.Window):
             self.info_sprite = None
             self.info_sprite_list = None
         try:
-            self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system.png"), scale=1.0)
+            self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system.png"), scale=1.7)
             self.settings_sprite_list = arcade.SpriteList()
             self.settings_sprite_list.append(self.settings_sprite)
         except Exception:
             try:
-                self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system-removebg-preview.png"), scale=1.0)
+                self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system-removebg-preview.png"), scale=1.2)
                 self.settings_sprite_list = arcade.SpriteList()
                 self.settings_sprite_list.append(self.settings_sprite)
             except Exception:
@@ -165,7 +168,7 @@ class SurvivalGame(arcade.Window):
             (-MAP_WIDTH//2, MAP_HEIGHT//2),
             (MAP_WIDTH//2, MAP_HEIGHT//2)
         ]
-        self.house_health_max = 100
+        self.house_health_max = 20
         self.house_health = self.house_health_max
         self.house_destroyed = False
 
@@ -210,8 +213,13 @@ class SurvivalGame(arcade.Window):
                 self.admin_input = self.admin_input[:-1]
                 return
         if self.state == "menu":
+            if key == arcade.key.ENTER or key == arcade.key.RETURN:
+                if self.player_name.strip():
+                    self.name_confirmed = True
+                return
             if key == arcade.key.BACKSPACE:
                 self.player_name = self.player_name[:-1]
+                self.name_confirmed = False
                 return
         if self.state == "game":
             if key == arcade.key.SPACE and self.shots_left > 0:
@@ -240,7 +248,7 @@ class SurvivalGame(arcade.Window):
 
         if self.state == "menu":
             bx, by, bw, bh = self.ui_rects["start_button"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.name_confirmed and bx <= x <= bx + bw and by <= y <= by + bh:
                 if not self.player_name.strip():
                     return
                 self.setup_game()
@@ -336,9 +344,12 @@ class SurvivalGame(arcade.Window):
             if text and text.isprintable():
                 self.admin_input += text
         if self.state == "menu":
+            if self.name_confirmed:
+                return
             if text and text.isprintable():
                 if len(self.player_name) < 16:
                     self.player_name += text
+                    self.name_confirmed = False
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -584,8 +595,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 140.0      # Federkonstante
-        d = 30.0       # Dämpfung
+        k = 420.0      # Federkonstante (sehr reaktionsschnell)
+        d = 60.0       # Dämpfung hält Bewegungen stabil
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -669,15 +680,12 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        bullet = arcade.Sprite(center_x=self.player.center_x, center_y=self.player.center_y)
-        bullet.texture = None
-        bullet.width = 6
-        bullet.height = 6
-        bullet.set_hit_box([(-3, -3), (-3, 3), (3, 3), (3, -3)])
-        bullet.change_x = dir_x * 20
-        bullet.change_y = dir_y * 20
-        bullet.life_time = 0.05
-        bullet.color = arcade.color.ORANGE
+        bullet = arcade.SpriteCircle(4.2, arcade.color.ORANGE_PEEL,
+                                     center_x=self.player.center_x,
+                                     center_y=self.player.center_y)
+        bullet.change_x = dir_x * 5
+        bullet.change_y = dir_y * 5
+        bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         self.shots_left -= 1
 
@@ -868,9 +876,8 @@ class SurvivalGame(arcade.Window):
                 continue
 
             if arcade.check_for_collision(enemy, self.player):
-                enemy.kill()
+                # Spieler nimmt Schaden, Gegner bleibt bestehen
                 self.player_health -= 1  # nur 1 Schaden
-                self.wave_kills += 1
                 self.wave_lives_lost += 1
 
         if self.player_health <= 0:
@@ -905,26 +912,34 @@ class SurvivalGame(arcade.Window):
             caret = "|" if self.caret_visible else ""
             bx, by, bw, bh = self.ui_rects["start_button"]
 
-            level = self.ease(self.hover_level.get("start_button", 0.0))
-            start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
-            self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.28)
-            arcade.draw_text("START",
-                             self.width//2, self.height//2,
-                             arcade.color.WHITE, 30,
-                             anchor_x="center", anchor_y="center")
-            self.start_button = (bx, by, bw, bh)
-            # Name-Feld unter START
-            field_w = 520
-            field_h = 60
-            field_x = self.width/2 - field_w/2
-            field_y = self.height/2 - 200
-            arcade.draw_text("Name:", field_x, field_y + field_h + 10, arcade.color.WHITE, 24)
-            arcade.draw_lbwh_rectangle_outline(field_x, field_y, field_w, field_h, arcade.color.WHITE, border_width=3)
-            caret = "|" if self.caret_visible else ""
-            arcade.draw_text(self.player_name + caret,
-                             field_x + 10, field_y + field_h/2,
-                             arcade.color.WHITE, 26,
-                             anchor_y="center")
+            if self.name_confirmed:
+                level = self.ease(self.hover_level.get("start_button", 0.0))
+                start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
+                self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.28)
+                arcade.draw_text("START",
+                                 self.width//2, self.height//2,
+                                 arcade.color.WHITE, 30,
+                                 anchor_x="center", anchor_y="center")
+                self.start_button = (bx, by, bw, bh)
+            else:
+                arcade.draw_text("Name eingeben und mit Enter bestätigen",
+                                 self.width//2, self.height//2,
+                                 arcade.color.LIGHT_GRAY, 24,
+                                 anchor_x="center", anchor_y="center")
+                self.start_button = None
+            # Name-Feld unter START (nur solange nicht bestätigt)
+            if not self.name_confirmed:
+                field_w = 520
+                field_h = 60
+                field_x = self.width/2 - field_w/2
+                field_y = self.height/2 - 200
+                arcade.draw_text("Name:", field_x, field_y + field_h + 10, arcade.color.WHITE, 24)
+                arcade.draw_lbwh_rectangle_outline(field_x, field_y, field_w, field_h, arcade.color.WHITE, border_width=3)
+                caret = "|" if self.caret_visible else ""
+                arcade.draw_text(self.player_name + caret,
+                                 field_x + 10, field_y + field_h/2,
+                                 arcade.color.WHITE, 26,
+                                 anchor_y="center")
 
         elif self.state == "game":
 
@@ -935,8 +950,13 @@ class SurvivalGame(arcade.Window):
                 self.decor_list.draw()
                 self.enemies.draw()
                 for bullet in self.bullet_list:
-                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 3, arcade.color.ORANGE)
+                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 4.2, arcade.color.ORANGE_PEEL)
                 self.player_list.draw()
+                arcade.draw_text(self.player_name,
+                                 self.player.center_x,
+                                 self.player.center_y + self.player.height/2 + 20,
+                                 arcade.color.BLACK, 18,
+                                 anchor_x="center")
                 # Haus-Lebensleiste
                 bar_w = 220
                 bar_h = 18
@@ -990,7 +1010,8 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.RED, 34,
                                  anchor_x="right", anchor_y="top")
             else:
-                arcade.draw_text("Vorbereitung",
+                prep_secs = max(0, math.ceil(self.wave_auto_timer))
+                arcade.draw_text(f"Vorbereitung {prep_secs}s",
                                  self.width - 10, self.height - 15,
                                  arcade.color.GREEN, 34,
                                  anchor_x="right", anchor_y="top")
@@ -1074,19 +1095,27 @@ class SurvivalGame(arcade.Window):
                              anchor_x="center")
             arcade.draw_text("Bewegung: Pfeiltasten",
                              self.width / 2, self.height - 230,
-                             arcade.color.WHITE, 28,
+                             arcade.color.WHITE, 30,
                              anchor_x="center")
-            arcade.draw_text("Schießen: Leertaste",
+            arcade.draw_text("Sprint: Shift (+8 Geschwindigkeit)",
                              self.width / 2, self.height - 280,
                              arcade.color.WHITE, 28,
                              anchor_x="center")
-            arcade.draw_text("Shift: schneller (+8) und kostet Energie",
+            arcade.draw_text("Schießen: Mausklick (Richtung = Cursor)",
                              self.width / 2, self.height - 330,
-                             arcade.color.WHITE, 26,
+                             arcade.color.WHITE, 30,
                              anchor_x="center")
-            arcade.draw_text("Karte: M",
+            arcade.draw_text("Radialschuss: Leertaste (verbraucht Munition)",
                              self.width / 2, self.height - 380,
                              arcade.color.WHITE, 26,
+                             anchor_x="center")
+            arcade.draw_text("Karte: M (ein/aus)",
+                             self.width / 2, self.height - 430,
+                             arcade.color.WHITE, 28,
+                             anchor_x="center")
+            arcade.draw_text("Name: wird über dem Spieler angezeigt",
+                             self.width / 2, self.height - 480,
+                             arcade.color.LIGHT_GRAY, 24,
                              anchor_x="center")
 
             bx, by, bw, bh = self.ui_rects["info_back"]
