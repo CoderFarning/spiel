@@ -47,11 +47,16 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_owned = False
         self.auto_shot_cooldown = 0.0
         self.auto_shot_waves_left = 0
+        self.wave_auto_timer = 20.0
         self.player_name = ""
         self.bullet_list = arcade.SpriteList()
-        self.bullet_texture = arcade.load_texture(str(IMG_DIR / "bullet.png"))
+        self.bullet_texture = None  # wird nicht mehr benutzt
         self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
-        self.weapon_equipped = False
+        self.pistol_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.6)
+        self.pistol_icon_list = arcade.SpriteList()
+        self.pistol_icon_list.append(self.pistol_icon_sprite)
+        self.weapon_equipped = True  # standardmäßig ausgerüstet, damit erster Klick sofort schießt
+        self.wave_auto_timer = 20.0
 
         self.player_health = 1_000_000
         self.shots_left = MAX_SHOTS
@@ -213,8 +218,6 @@ class SurvivalGame(arcade.Window):
                 self.radius_shot()
             if key == arcade.key.M:
                 self.show_minimap = not self.show_minimap
-            if key == arcade.key.KEY_1:
-                self.weapon_equipped = not self.weapon_equipped
         elif self.state == "info":
             if key == arcade.key.ESCAPE:
                 self.state = "game"
@@ -238,6 +241,8 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             bx, by, bw, bh = self.ui_rects["start_button"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
+                if not self.player_name.strip():
+                    return
                 self.setup_game()
                 self.state = "game"
                 self.start_prep()
@@ -256,31 +261,6 @@ class SurvivalGame(arcade.Window):
                 self.admin_focus = False
                 self.admin_message = ""
                 self.admin_message_timer = 0.0
-                return
-
-            bx, by, bw, bh = self.ui_rects["wave_button"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
-                if not self.wave_active:
-                    if self.wave_started_once and self.wave_completed:
-                        self.wave_number += 1
-                    self.current_spawn_interval = max(0.4, SPAWN_INTERVAL - (self.wave_number - 1) * 0.2)
-                    self.current_enemy_speed = ENEMY_SPEED + (self.wave_number - 1) * 0.8
-                    self.wave_active = True
-                    self.wave_started_once = True
-                    self.wave_completed = False
-                    self.wave_timer = 0
-                    self.spawn_timer = 0
-                    self.wave_message = ""
-                    self.wave_message_timer = 0.0
-                    self.spawn_cycles_done = 0
-                    self.spawn_cycles_per_wave = 3 + self.wave_number
-                    self.wave_kills = 0
-                    self.wave_lives_lost = 0
-                    self.wave_reward_coins = 0
-                    self.stop_prep()
-                    self.start_bg()
-                    if self.auto_shot_owned and self.auto_shot_waves_left <= 0:
-                        self.auto_shot_owned = False
                 return
 
             if button == arcade.MOUSE_BUTTON_LEFT:
@@ -382,7 +362,7 @@ class SurvivalGame(arcade.Window):
         self.shots_left -= hits
 
     def get_wave_button_rect(self):
-        return (20, 20, 320, 70)
+        return (0, 0, 0, 0)  # Wave-Button deaktiviert/unsichtbar
 
     def get_shop_leave_button_rect(self):
         text_obj = arcade.Text(self.shop_leave_label, 0, 0, arcade.color.WHITE, 26, anchor_x="center", anchor_y="center")
@@ -503,7 +483,7 @@ class SurvivalGame(arcade.Window):
     def draw_scaled_rect(bx, by, bw, bh, color, level, scale_factor=0.08):
         e = SurvivalGame.ease(level)
         # zusätzliches sanftes Overshoot für lebendige Buttons
-        overshoot = 0.04 * e
+        overshoot = 0.02 * e
         scale = 1.0 + scale_factor * e + overshoot
         cx = bx + bw / 2
         cy = by + bh / 2
@@ -604,8 +584,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 110.0      # Federkonstante
-        d = 22.0       # Dämpfung
+        k = 140.0      # Federkonstante
+        d = 30.0       # Dämpfung
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -651,9 +631,34 @@ class SurvivalGame(arcade.Window):
         wy = y - self.height / 2 + cy
         return wx, wy
 
+    def start_wave(self):
+        if self.wave_active:
+            return
+        if self.wave_started_once and self.wave_completed:
+            self.wave_number += 1
+        self.current_spawn_interval = max(0.4, SPAWN_INTERVAL - (self.wave_number - 1) * 0.2)
+        self.current_enemy_speed = ENEMY_SPEED + (self.wave_number - 1) * 0.8
+        self.wave_active = True
+        self.wave_started_once = True
+        self.wave_completed = False
+        self.wave_timer = 0
+        self.spawn_timer = 0
+        self.wave_message = ""
+        self.wave_message_timer = 0.0
+        self.spawn_cycles_done = 0
+        self.spawn_cycles_per_wave = 3 + self.wave_number
+        self.wave_kills = 0
+        self.wave_lives_lost = 0
+        self.wave_reward_coins = 0
+        self.stop_prep()
+        self.start_bg()
+        self.wave_auto_timer = 20.0
+        if self.auto_shot_owned and self.auto_shot_waves_left <= 0:
+            self.auto_shot_owned = False
+
     def fire_bullet(self, screen_x, screen_y):
         if not self.weapon_equipped:
-            return
+            pass
         if self.shots_left <= 0:
             return
         wx, wy = self.screen_to_world(screen_x, screen_y)
@@ -666,11 +671,11 @@ class SurvivalGame(arcade.Window):
         dir_y = dy / dist
         bullet = arcade.Sprite(center_x=self.player.center_x, center_y=self.player.center_y)
         bullet.texture = self.bullet_texture
-        bullet.width = self.bullet_texture.width * 0.6
-        bullet.height = self.bullet_texture.height * 0.6
+        bullet.width = self.bullet_texture.width * 0.4
+        bullet.height = self.bullet_texture.height * 0.4
         bullet.change_x = dir_x * 20
         bullet.change_y = dir_y * 20
-        bullet.life_time = 0.6
+        bullet.life_time = 0.05
         bullet.angle = math.degrees(math.atan2(dir_y, dir_x))
         self.bullet_list.append(bullet)
         self.shots_left -= 1
@@ -717,6 +722,14 @@ class SurvivalGame(arcade.Window):
             if in_range:
                 self.radius_shot()
                 self.auto_shot_cooldown = 0.4
+
+        # Auto-Start nach 20s Vorbereitung
+        if not self.wave_active:
+            self.wave_auto_timer -= delta_time
+            if self.wave_auto_timer <= 0:
+                self.start_wave()
+        else:
+            self.wave_auto_timer = 20.0
 
         # Bullets bewegen und Lebensdauer prüfen
         for bullet in list(self.bullet_list):
@@ -888,6 +901,7 @@ class SurvivalGame(arcade.Window):
                              self.width/2, self.height/2+150,
                              arcade.color.WHITE, 60,
                              anchor_x="center")
+            caret = "|" if self.caret_visible else ""
             bx, by, bw, bh = self.ui_rects["start_button"]
 
             level = self.ease(self.hover_level.get("start_button", 0.0))
@@ -947,18 +961,6 @@ class SurvivalGame(arcade.Window):
                                          anchor_x="center", anchor_y="center")
 
             # Wave Button
-            bx, by, bw, bh = self.ui_rects["wave_button"]
-
-            level = self.ease(self.hover_level.get("wave_button", 0.0))
-            wave_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
-            self.draw_scaled_rect(bx, by, bw, bh, wave_color, level, scale_factor=0.23)
-            wave_button_text = "Welle starten" if not self.wave_started_once else "Neue Welle"
-            cx = bx + bw / 2
-            cy = by + bh / 2
-            arcade.draw_text(wave_button_text,
-                             cx, cy,
-                             arcade.color.WHITE, 20,
-                             anchor_x="center", anchor_y="center")
             # Anzeigen
             hud_left_x = 20
             hud_left_y = self.height - 40
@@ -969,6 +971,7 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
+            # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
             slot_x, slot_y = 20, 20
@@ -976,9 +979,9 @@ class SurvivalGame(arcade.Window):
             arcade.draw_lbwh_rectangle_outline(slot_x, slot_y, slot_w, slot_h, slot_color, border_width=4)
             arcade.draw_text("1", slot_x + slot_w/2, slot_y + slot_h - 22, arcade.color.WHITE, 22, anchor_x="center")
             if self.pistol_texture:
-                tex_w = self.pistol_texture.width * 0.6
-                tex_h = self.pistol_texture.height * 0.6
-                arcade.draw_lrwh_rectangle_textured(slot_x + 10, slot_y + 10, tex_w, tex_h, self.pistol_texture)
+                self.pistol_icon_sprite.center_x = slot_x + slot_w/2
+                self.pistol_icon_sprite.center_y = slot_y + slot_h/2
+                self.pistol_icon_list.draw()
             if self.wave_active:
                 arcade.draw_text(f"WELLE {self.wave_number}",
                                  self.width - 10, self.height - 15,

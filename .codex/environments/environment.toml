@@ -9,3 +9,8 @@ script = ""
 name = "Ausgeführt"
 icon = "run"
 command = "pip install run"
+
+[[actions]]
+name = "arcade"
+icon = "tool"
+command = "pip install arcade"
