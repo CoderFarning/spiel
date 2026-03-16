@@ -670,13 +670,14 @@ class SurvivalGame(arcade.Window):
         dir_x = dx / dist
         dir_y = dy / dist
         bullet = arcade.Sprite(center_x=self.player.center_x, center_y=self.player.center_y)
-        bullet.texture = self.bullet_texture
-        bullet.width = self.bullet_texture.width * 0.4
-        bullet.height = self.bullet_texture.height * 0.4
+        bullet.texture = None
+        bullet.width = 6
+        bullet.height = 6
+        bullet.set_hit_box([(-3, -3), (-3, 3), (3, 3), (3, -3)])
         bullet.change_x = dir_x * 20
         bullet.change_y = dir_y * 20
         bullet.life_time = 0.05
-        bullet.angle = math.degrees(math.atan2(dir_y, dir_x))
+        bullet.color = arcade.color.ORANGE
         self.bullet_list.append(bullet)
         self.shots_left -= 1
 
@@ -933,7 +934,8 @@ class SurvivalGame(arcade.Window):
                                                    arcade.color.RED, border_width=6)
                 self.decor_list.draw()
                 self.enemies.draw()
-                self.bullet_list.draw()
+                for bullet in self.bullet_list:
+                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 3, arcade.color.ORANGE)
                 self.player_list.draw()
                 # Haus-Lebensleiste
                 bar_w = 220
