@@ -8,8 +8,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Extrem hohe Update-Rate für maximale Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/480)
+        # Noch höhere Update-Rate für maximale Eingabe-/Maus-Flüssigkeit
+        self.set_update_rate(1/600)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -60,6 +60,7 @@ class SurvivalGame(arcade.Window):
         self.pistol_icon_list.append(self.pistol_icon_sprite)
         self.weapon_equipped = True  # standardmäßig ausgerüstet, damit erster Klick sofort schießt
         self.wave_auto_timer = 20.0
+        self.house_upgrades_on = False
 
         self.player_health = 1_000_000
         self.shots_left = float("inf")
@@ -222,8 +223,6 @@ class SurvivalGame(arcade.Window):
                 self.name_confirmed = False
                 return
         if self.state == "game":
-            if key == arcade.key.SPACE and self.shots_left > 0:
-                self.radius_shot()
             if key == arcade.key.M:
                 self.show_minimap = not self.show_minimap
         elif self.state == "info":
@@ -269,6 +268,10 @@ class SurvivalGame(arcade.Window):
                 self.admin_focus = False
                 self.admin_message = ""
                 self.admin_message_timer = 0.0
+                return
+            bx, by, bw, bh = self.ui_rects["house_upgrades"]
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self.house_upgrades_on = not self.house_upgrades_on
                 return
 
             if button == arcade.MOUSE_BUTTON_LEFT:
@@ -353,24 +356,8 @@ class SurvivalGame(arcade.Window):
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
-        enemies_to_kill = []
-        for enemy in self.enemies:
-            if enemy.is_dying:
-                continue
-            dist = arcade.get_distance_between_sprites(self.player, enemy)
-            if dist <= SHOT_RADIUS:
-                enemies_to_kill.append((dist, enemy))
-
-        enemies_to_kill.sort(key=lambda item: item[0])
-        hits = len(enemies_to_kill)
-
-        for _, enemy in enemies_to_kill[:hits]:
-            enemy.texture = arcade.load_texture(str(IMG_DIR / "explosion.png"))
-            enemy.is_dying = True
-            enemy.death_timer = EXPLOSION_DURATION
-            self.wave_kills += 1
-            arcade.play_sound(self.hit_sound)
-        # unendliche Munition: kein Abzug
+        # Radialschuss deaktiviert
+        return
 
     def get_wave_button_rect(self):
         return (0, 0, 0, 0)  # Wave-Button deaktiviert/unsichtbar
@@ -530,6 +517,14 @@ class SurvivalGame(arcade.Window):
         # Info- und Settings-Buttons oben rechts, etwas größer
         self.ui_rects["info_button"] = (self.width - 110, self.height - 190, 90, 90)
         self.ui_rects["settings_button"] = (self.width - 220, self.height - 190, 90, 90)
+        # Haus-Upgrades-Schalter links oben, weiter unten; Breite passt sich an Text an
+        switch_w, switch_h = 70, 30
+        text_sample = arcade.Text("Haus Upgrades anzeigen", 0, 0, arcade.color.WHITE, 18, anchor_y="center")
+        bw = switch_w + 12 + text_sample.content_width + 16
+        bh = max(44, max(switch_h + 12, text_sample.content_height + 16))
+        bx = 20
+        by = self.height - 190
+        self.ui_rects["house_upgrades"] = (bx, by, bw, bh)
 
         # Info overlay
         self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
@@ -582,7 +577,7 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             active_keys = ["start_button"]
         elif self.state == "game":
-            active_keys = ["wave_button", "info_button", "settings_button"]
+            active_keys = ["wave_button", "info_button", "settings_button", "house_upgrades"]
         elif self.state == "info":
             active_keys = ["info_back"]
         elif self.state == "settings":
@@ -595,8 +590,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 720.0      # Federkonstante (noch direkter)
-        d = 90.0       # Dämpfung für kontrolliertes Abklingen
+        k = 900.0      # Federkonstante (extrem direkt)
+        d = 110.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -765,13 +760,13 @@ class SurvivalGame(arcade.Window):
         shift_down = False
         speed = PLAYER_SPEED
 
-        if arcade.key.UP in self.keys:
+        if arcade.key.UP in self.keys or arcade.key.W in self.keys:
             self.player.change_y = speed
-        if arcade.key.DOWN in self.keys:
+        if arcade.key.DOWN in self.keys or arcade.key.S in self.keys:
             self.player.change_y = -speed
-        if arcade.key.LEFT in self.keys:
+        if arcade.key.LEFT in self.keys or arcade.key.A in self.keys:
             self.player.change_x = -speed
-        if arcade.key.RIGHT in self.keys:
+        if arcade.key.RIGHT in self.keys or arcade.key.D in self.keys:
             self.player.change_x = speed
 
         self.player.center_x += self.player.change_x
@@ -986,6 +981,25 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
+            # Haus-Upgrades-Schalter
+            bx, by, bw, bh = self.ui_rects["house_upgrades"]
+            lvl_switch = self.ease(self.hover_level.get("house_upgrades", 0.0))
+            switch_w, switch_h = 70, 30
+            switch_x = bx + 10
+            switch_y = by + (bh - switch_h) / 2
+            # Hintergrund des Klickbereichs
+            self.draw_scaled_rect(bx, by, bw, bh, (30, 30, 30), lvl_switch, scale_factor=0.08)
+            # eigentlicher Schalter
+            state_color = arcade.color.SPRING_GREEN if self.house_upgrades_on else arcade.color.GRAY
+            arcade.draw_lbwh_rectangle_filled(switch_x, switch_y, switch_w, switch_h, state_color)
+            arcade.draw_lbwh_rectangle_outline(switch_x, switch_y, switch_w, switch_h, arcade.color.BLACK, border_width=2)
+            knob_r = switch_h / 2 - 3
+            knob_x = switch_x + (switch_w - knob_r - 3) if self.house_upgrades_on else switch_x + knob_r + 3
+            arcade.draw_circle_filled(knob_x, switch_y + switch_h/2, knob_r, arcade.color.WHITE)
+            arcade.draw_text("Haus Upgrades anzeigen",
+                             switch_x + switch_w + 16, by + bh/2,
+                             arcade.color.WHITE, 18,
+                             anchor_y="center")
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
