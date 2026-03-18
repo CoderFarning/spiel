@@ -8,8 +8,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Noch höhere Update-Rate für maximale Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/600)
+        # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
+        self.set_update_rate(1/800)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
