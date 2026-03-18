@@ -590,8 +590,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 900.0      # Federkonstante (extrem direkt)
-        d = 110.0      # Dämpfung für kontrolliertes Abklingen
+        k = 950.0      # Federkonstante (extrem direkt)
+        d = 120.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
