@@ -648,7 +648,7 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        bullet = arcade.SpriteCircle(5.2, arcade.color.ORANGE_PEEL,
+        bullet = arcade.SpriteCircle(8, arcade.color.ORANGE_PEEL,
                                      center_x=self.player.center_x,
                                      center_y=self.player.center_y)
         bullet.change_x = dir_x * 3
@@ -922,7 +922,7 @@ class SurvivalGame(arcade.Window):
                 self.decor_list.draw()
                 self.enemies.draw()
                 for bullet in self.bullet_list:
-                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 5.2, arcade.color.ORANGE_PEEL)
+                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 8, arcade.color.ORANGE_PEEL)
                 self.player_list.draw()
                 arcade.draw_text(self.player_name,
                                  self.player.center_x,
