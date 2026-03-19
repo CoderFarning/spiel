@@ -10,7 +10,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/3600)
+        self.set_update_rate(1/4800)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -269,29 +269,8 @@ class SurvivalGame(arcade.Window):
             else:
                 self.admin_focus = False
 
-            bx, by, bw, bh = self.ui_rects["settings_back"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
-                self.state = "game"
-                self.admin_focus = False
-                return
-
-            if self.settings_unlocked:
-                bx, by, bw, bh = self.ui_rects["settings_ammo"]
-                if bx <= x <= bx + bw and by <= y <= by + bh:
-                    self.shots_left = 1_000_000
-                    return
-                bx, by, bw, bh = self.ui_rects["settings_health"]
-                if bx <= x <= bx + bw and by <= y <= by + bh:
-                    self.player_health = 1_000_000
-                    return
-                bx, by, bw, bh = self.ui_rects["settings_energy"]
-                if bx <= x <= bx + bw and by <= y <= by + bh:
-                    self.energy = 100.0
-                    return
-                bx, by, bw, bh = self.ui_rects["settings_coins"]
-                if bx <= x <= bx + bw and by <= y <= by + bh:
-                    self.total_coins = 1_000_000
-                    return
+            # Settings-Fenster deaktiviert – keine Interaktion
+            return
 
         elif self.state == "shop":
             bx, by, bw, bh = self.ui_rects["shop_leave"]
@@ -493,6 +472,8 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
         # Info-Button oben rechts
         self.ui_rects["info_button"] = (self.width - 110, self.height - 190, 90, 90)
+        # Settings deaktiviert, aber KeyError vermeiden
+        self.ui_rects["settings_button"] = (0, 0, 0, 0)
         # Haus-Upgrades-Schalter links oben, weiter unten; Breite passt sich an Text an
         switch_w, switch_h = 70, 30
         text_sample = arcade.Text("Haus Upgrades anzeigen", 0, 0, arcade.color.WHITE, 18, anchor_y="center")
@@ -564,8 +545,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 1900.0     # Federkonstante (extrem direkt)
-        d = 260.0      # Dämpfung für kontrolliertes Abklingen
+        k = 2300.0     # Federkonstante (extrem direkt)
+        d = 310.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -648,11 +629,18 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        bullet = arcade.SpriteCircle(8, arcade.color.ORANGE_PEEL,
-                                     center_x=self.player.center_x,
-                                     center_y=self.player.center_y)
-        bullet.change_x = dir_x * 3
-        bullet.change_y = dir_y * 3
+        muzzle_offset = 25
+        # Versatz leicht nach rechts oben relativ zur Spielergröße
+        offset_x = dir_x * muzzle_offset + (self.player.width * 0.15 if dir_y >= 0 else self.player.width * 0.1)
+        offset_y = dir_y * muzzle_offset + (self.player.height * 0.15 if dir_y >= 0 else -self.player.height * 0.05)
+        start_x = self.player.center_x + offset_x
+        start_y = self.player.center_y + offset_y
+        bullet = arcade.SpriteCircle(9.3, arcade.color.ORANGE_PEEL,
+                                     center_x=start_x,
+                                     center_y=start_y)
+        bullet.alpha = 255
+        bullet.change_x = dir_x * 2
+        bullet.change_y = dir_y * 2
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
@@ -922,7 +910,7 @@ class SurvivalGame(arcade.Window):
                 self.decor_list.draw()
                 self.enemies.draw()
                 for bullet in self.bullet_list:
-                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 8, arcade.color.ORANGE_PEEL)
+                    arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 9.3, arcade.color.ORANGE_PEEL)
                 self.player_list.draw()
                 arcade.draw_text(self.player_name,
                                  self.player.center_x,
