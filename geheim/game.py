@@ -10,7 +10,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/1000)
+        self.set_update_rate(1/3600)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -101,18 +101,8 @@ class SurvivalGame(arcade.Window):
         except Exception:
             self.info_sprite = None
             self.info_sprite_list = None
-        try:
-            self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system.png"), scale=1.7)
-            self.settings_sprite_list = arcade.SpriteList()
-            self.settings_sprite_list.append(self.settings_sprite)
-        except Exception:
-            try:
-                self.settings_sprite = arcade.Sprite(str(IMG_DIR / "system-removebg-preview.png"), scale=1.2)
-                self.settings_sprite_list = arcade.SpriteList()
-                self.settings_sprite_list.append(self.settings_sprite)
-            except Exception:
-                self.settings_sprite = None
-                self.settings_sprite_list = None
+        self.settings_sprite = None
+        self.settings_sprite_list = None
         try:
             self.win_sound = arcade.load_sound(str(SOUND_DIR / "gewonnen.wav"))
         except Exception:
@@ -143,9 +133,7 @@ class SurvivalGame(arcade.Window):
         self.house_sprite.center_y = 0
         self.decor_list.append(self.house_sprite)
 
-        self.player = arcade.Sprite(str(IMG_DIR / "spieler.png"))
-        self.player.width = PLAYER_WIDTH
-        self.player.height = PLAYER_HEIGHT
+        self.player = arcade.Sprite(str(IMG_DIR / "spieler.png"), scale=0.4)
         self.player.center_x = self.house_sprite.center_x
         self.player.center_y = self.house_sprite.center_y - 200  # 10 Blöcke unter dem Haus
         self.player_list.append(self.player)
@@ -258,13 +246,6 @@ class SurvivalGame(arcade.Window):
                 return
 
             bx, by, bw, bh = self.ui_rects["settings_button"]
-            if bx <= x <= bx + bw and by <= y <= by + bh and not self.wave_active:
-                self.state = "settings"
-                self.admin_input = ""
-                self.admin_focus = False
-                self.admin_message = ""
-                self.admin_message_timer = 0.0
-                return
             bx, by, bw, bh = self.ui_rects["house_upgrades"]
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.house_upgrades_on = not self.house_upgrades_on
@@ -510,16 +491,15 @@ class SurvivalGame(arcade.Window):
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
-        # Info- und Settings-Buttons oben rechts, etwas größer
+        # Info-Button oben rechts
         self.ui_rects["info_button"] = (self.width - 110, self.height - 190, 90, 90)
-        self.ui_rects["settings_button"] = (self.width - 220, self.height - 190, 90, 90)
         # Haus-Upgrades-Schalter links oben, weiter unten; Breite passt sich an Text an
         switch_w, switch_h = 70, 30
         text_sample = arcade.Text("Haus Upgrades anzeigen", 0, 0, arcade.color.WHITE, 18, anchor_y="center")
         bw = switch_w + 12 + text_sample.content_width + 16
         bh = max(44, max(switch_h + 12, text_sample.content_height + 16))
         bx = 20
-        by = self.height - 190
+        by = self.height - 182  # 5px weiter hoch (insg. +8)
         self.ui_rects["house_upgrades"] = (bx, by, bw, bh)
 
         # Info overlay
@@ -573,21 +553,19 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             active_keys = ["start_button"]
         elif self.state == "game":
-            active_keys = ["wave_button", "info_button", "settings_button", "house_upgrades"]
+            active_keys = ["wave_button", "info_button", "house_upgrades"]
         elif self.state == "info":
             active_keys = ["info_back"]
         elif self.state == "settings":
-            active_keys = ["settings_back"]
-            if self.settings_unlocked:
-                active_keys += ["settings_ammo", "settings_health", "settings_energy", "settings_coins"]
+            active_keys = []
         elif self.state == "shop":
             active_keys = ["shop_buy_one", "shop_energy", "shop_leave"]
             if not self.auto_shot_owned:
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 1000.0     # Federkonstante (maximal direkt)
-        d = 130.0      # Dämpfung für kontrolliertes Abklingen
+        k = 1900.0     # Federkonstante (extrem direkt)
+        d = 260.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -673,8 +651,8 @@ class SurvivalGame(arcade.Window):
         bullet = arcade.SpriteCircle(5.2, arcade.color.ORANGE_PEEL,
                                      center_x=self.player.center_x,
                                      center_y=self.player.center_y)
-        bullet.change_x = dir_x * 5
-        bullet.change_y = dir_y * 5
+        bullet.change_x = dir_x * 3
+        bullet.change_y = dir_y * 3
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
@@ -1041,19 +1019,6 @@ class SurvivalGame(arcade.Window):
                 arcade.draw_circle_filled(bx + bw / 2, by + bh / 2, min(bw, bh) / 2, arcade.color.DARK_BLUE)
                 arcade.draw_text("i", bx + bw / 2, by + bh / 2,
                                  arcade.color.WHITE, 28, anchor_x="center", anchor_y="center")
-
-            bx, by, bw, bh = self.ui_rects["settings_button"]
-            if self.settings_sprite:
-                self.settings_sprite.center_x = bx + bw / 2
-                self.settings_sprite.center_y = by + bh / 2
-                scale = 1.2 * (1.0 + 0.15 * self.ease(self.hover_level.get("settings_button", 0.0)))
-                self.settings_sprite.width = bw * scale
-                self.settings_sprite.height = bh * scale
-                self.settings_sprite_list.draw()
-            else:
-                arcade.draw_circle_filled(bx + bw / 2, by + bh / 2, min(bw, bh) / 2, arcade.color.GRAY)
-                arcade.draw_text("S", bx + bw / 2, by + bh / 2,
-                                 arcade.color.WHITE, 24, anchor_x="center", anchor_y="center")
 
             if self.wave_message:
                 arcade.draw_text(self.wave_message,
