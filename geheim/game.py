@@ -10,7 +10,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/6000)
+        self.set_update_rate(1/10000)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -545,8 +545,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 2600.0     # Federkonstante (extrem direkt)
-        d = 340.0      # Dämpfung für kontrolliertes Abklingen
+        k = 3300.0     # Federkonstante (extrem direkt)
+        d = 420.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -629,9 +629,9 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        # Schuss startet immer am oberen linken Rand der Spielfigur (Pistole)
-        start_x = self.player.center_x - self.player.width / 2
-        start_y = self.player.center_y + self.player.height / 2
+        # Schuss startet leicht rechts der Mitte, knapp über dem Spieler
+        start_x = self.player.center_x + 1
+        start_y = self.player.center_y + self.player.height / 2 + 5
         bullet = arcade.SpriteCircle(9.3, arcade.color.ORANGE_PEEL,
                                      center_x=start_x,
                                      center_y=start_y)
