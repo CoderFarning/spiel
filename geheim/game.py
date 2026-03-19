@@ -1,5 +1,6 @@
 import arcade
 import math
+import random
 
 from constants import *
 from enemy import Enemy
@@ -9,7 +10,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/800)
+        self.set_update_rate(1/1000)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -162,13 +163,8 @@ class SurvivalGame(arcade.Window):
         self.portal_sprite.center_y = self.portal_y
         self.portal_list.append(self.portal_sprite)
 
-        # Spawner entfallen; Gegner erscheinen aus den vier Ecken
-        self.spawners = [
-            (-MAP_WIDTH//2, -MAP_HEIGHT//2),
-            (MAP_WIDTH//2, -MAP_HEIGHT//2),
-            (-MAP_WIDTH//2, MAP_HEIGHT//2),
-            (MAP_WIDTH//2, MAP_HEIGHT//2)
-        ]
+        # Spawner entfallen; Gegner werden zufällig am Kartenrand erzeugt
+        self.spawners = []
         self.house_health_max = 20
         self.house_health = self.house_health_max
         self.house_destroyed = False
@@ -590,8 +586,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 950.0      # Federkonstante (extrem direkt)
-        d = 120.0      # Dämpfung für kontrolliertes Abklingen
+        k = 1000.0     # Federkonstante (maximal direkt)
+        d = 130.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -642,8 +638,8 @@ class SurvivalGame(arcade.Window):
             return
         if self.wave_started_once and self.wave_completed:
             self.wave_number += 1
-        self.current_spawn_interval = max(0.4, SPAWN_INTERVAL - (self.wave_number - 1) * 0.2)
-        self.current_enemy_speed = ENEMY_SPEED + (self.wave_number - 1) * 0.8
+        self.current_spawn_interval = SPAWN_INTERVAL  # konstant 3s
+        self.current_enemy_speed = ENEMY_SPEED       # konstant 2
         self.wave_active = True
         self.wave_started_once = True
         self.wave_completed = False
@@ -876,15 +872,25 @@ class SurvivalGame(arcade.Window):
     # ---------------- SPAWN ----------------
     def spawn_enemies(self):
         image = str(IMG_DIR / "gegner.png")
-
-        for spawner in self.spawners:
-            amount = 1 + (self.wave_number - 1) // 2
-            for _ in range(amount):
-                enemy = Enemy(image)
-                enemy.base_speed = self.current_enemy_speed
-                enemy.center_x = spawner[0]
-                enemy.center_y = spawner[1]
-                self.enemies.append(enemy)
+        amount = 1 + (self.wave_number - 1) // 2
+        for _ in range(amount):
+            enemy = Enemy(image)
+            enemy.base_speed = self.current_enemy_speed
+            # zufällige Position am Kartenrand
+            side = random.choice(["left", "right", "top", "bottom"])
+            if side == "left":
+                enemy.center_x = -MAP_WIDTH // 2
+                enemy.center_y = random.uniform(-MAP_HEIGHT / 2, MAP_HEIGHT / 2)
+            elif side == "right":
+                enemy.center_x = MAP_WIDTH // 2
+                enemy.center_y = random.uniform(-MAP_HEIGHT / 2, MAP_HEIGHT / 2)
+            elif side == "top":
+                enemy.center_x = random.uniform(-MAP_WIDTH / 2, MAP_WIDTH / 2)
+                enemy.center_y = MAP_HEIGHT // 2
+            else:  # bottom
+                enemy.center_x = random.uniform(-MAP_WIDTH / 2, MAP_WIDTH / 2)
+                enemy.center_y = -MAP_HEIGHT // 2
+            self.enemies.append(enemy)
 
     # ---------------- DRAW ----------------
     def on_draw(self):
@@ -1078,11 +1084,6 @@ class SurvivalGame(arcade.Window):
                     ex = minimap_x + (enemy.center_x + MAP_WIDTH/2) * MINIMAP_SCALE
                     ey = minimap_y + (enemy.center_y + MAP_HEIGHT/2) * MINIMAP_SCALE
                     arcade.draw_circle_filled(ex, ey, 4, arcade.color.RED)
-
-                for spawner in self.spawners:
-                    sx = minimap_x + (spawner[0] + MAP_WIDTH/2) * MINIMAP_SCALE
-                    sy = minimap_y + (spawner[1] + MAP_HEIGHT/2) * MINIMAP_SCALE
-                    arcade.draw_circle_filled(sx, sy, 5, arcade.color.YELLOW)
 
                 # Haus auf Minimap (braunes Rectangle-Outline)
                 hx = minimap_x + (self.house_sprite.center_x + MAP_WIDTH/2) * MINIMAP_SCALE
