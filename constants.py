@@ -6,10 +6,10 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 MAP_WIDTH = 10000
 MAP_HEIGHT = 10000
-# Assets liegen jetzt im selben Ordner wie diese Datei (/geheim)
+# Assets liegen jetzt im selben Ordner wie diese Datei
 ASSET_BASE = Path(__file__).resolve().parent
-IMG_DIR = ASSET_BASE / "Bilder"
-SOUND_DIR = ASSET_BASE / "Sounds"
+IMG_DIR = ASSET_BASE            # Bilder liegen jetzt direkt hier
+SOUND_DIR = ASSET_BASE          # Sounds liegen jetzt direkt hier
 
 PLAYER_WIDTH = 180
 PLAYER_HEIGHT = 240
