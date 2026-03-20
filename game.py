@@ -636,8 +636,9 @@ class SurvivalGame(arcade.Window):
                                      center_x=start_x,
                                      center_y=start_y)
         bullet.alpha = 255
-        bullet.change_x = dir_x * 2
-        bullet.change_y = dir_y * 2
+        # 15 px/ms => 15000 px/s
+        bullet.change_x = dir_x * 15000
+        bullet.change_y = dir_y * 15000
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
