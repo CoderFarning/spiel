@@ -636,8 +636,8 @@ class SurvivalGame(arcade.Window):
                                      center_x=start_x,
                                      center_y=start_y)
         bullet.alpha = 255
-        bullet.change_x = dir_x * 1
-        bullet.change_y = dir_y * 1
+        bullet.change_x = dir_x * 2
+        bullet.change_y = dir_y * 2
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
@@ -695,8 +695,8 @@ class SurvivalGame(arcade.Window):
 
         # Bullets bewegen und Lebensdauer prüfen
         for bullet in list(self.bullet_list):
-            bullet.center_x += bullet.change_x
-            bullet.center_y += bullet.change_y
+            bullet.center_x += bullet.change_x * delta_time
+            bullet.center_y += bullet.change_y * delta_time
             bullet.life_time -= delta_time
             if bullet.life_time <= 0:
                 bullet.kill()
@@ -728,8 +728,8 @@ class SurvivalGame(arcade.Window):
         if arcade.key.RIGHT in self.keys or arcade.key.D in self.keys:
             self.player.change_x = speed
 
-        self.player.center_x += self.player.change_x
-        self.player.center_y += self.player.change_y
+        self.player.center_x += self.player.change_x * delta_time
+        self.player.center_y += self.player.change_y * delta_time
         # Haus regeneriert Spieler
         if arcade.check_for_collision(self.player, self.house_sprite):
             self.player_health = 1_000_000
@@ -809,8 +809,8 @@ class SurvivalGame(arcade.Window):
             dist = math.hypot(dx, dy)
 
             if dist > 0:
-                enemy.center_x += (dx / dist) * enemy.base_speed
-                enemy.center_y += (dy / dist) * enemy.base_speed
+                enemy.center_x += (dx / dist) * enemy.base_speed * delta_time
+                enemy.center_y += (dy / dist) * enemy.base_speed * delta_time
 
             enemy.center_x = max(-MAP_WIDTH//2, min(MAP_WIDTH//2, enemy.center_x))
             enemy.center_y = max(-MAP_HEIGHT//2, min(MAP_HEIGHT//2, enemy.center_y))
