@@ -13,12 +13,12 @@ SOUND_DIR = ASSET_BASE          # Sounds liegen jetzt direkt hier
 
 PLAYER_WIDTH = 180
 PLAYER_HEIGHT = 240
-PLAYER_SPEED = 145         # px/s
+PLAYER_SPEED = 145 + (100/60) + 50 + 100 + 300 + 120    # px/s
 
 SPAWN_INTERVAL = 3.0
 WAVE_DURATION = 30
 
-ENEMY_SPEED = 95           # px/s
+ENEMY_SPEED = 95 + (100/60) + 50 + 100 + 300 + 120      # px/s
 MINIMAP_SCALE = 0.05
 
 SHOT_RADIUS = 500

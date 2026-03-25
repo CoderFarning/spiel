@@ -38,6 +38,7 @@ class SurvivalGame(arcade.Window):
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
         self.touch_timer_isch = 0.0
+        self.wood = 10
         self.mouse_x = 0
         self.mouse_y = 0
         self.admin_focus = False
@@ -74,7 +75,7 @@ class SurvivalGame(arcade.Window):
         self.wave_button = None
         self.shop_return_button = None
         self.shop_buy_one_button = None
-        self.hit_sound = arcade.load_sound(str(SOUND_DIR / "getroffen.wav"))
+        self.hit_sound = None  # getroffen.wav entfernt
         self.bg_sound = arcade.load_sound(str(SOUND_DIR / "hintergrund.wav"))
         self.bg_player = None
         try:
@@ -83,14 +84,8 @@ class SurvivalGame(arcade.Window):
             self.prep_sound = None
         self.prep_player = None
 
-        try:
-            self.shop_sound = arcade.load_sound(str(SOUND_DIR / "shopsound.wav"))
-        except Exception:
-            self.shop_sound = None
-        try:
-            self.shop_enter_sound = arcade.load_sound(str(SOUND_DIR / "bb.wav"))
-        except Exception:
-            self.shop_enter_sound = None
+        self.shop_sound = None
+        self.shop_enter_sound = None
         self.shop_enter_player = None
         self.shop_sound_player = None
         self.bg_player = None
@@ -141,11 +136,12 @@ class SurvivalGame(arcade.Window):
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
         # Upgrade-Objekt isch.png
         try:
-            self.isch_sprite = arcade.Sprite(str(IMG_DIR / "isch.png"), scale=0.3)
+            self.isch_sprite = arcade.Sprite(str(IMG_DIR / "tisch.png"), scale=0.3)
         except Exception:
             self.isch_sprite = arcade.Sprite(center_x=200, center_y=0, scale=0.3)
-        self.isch_sprite.center_x = 200
-        self.isch_sprite.center_y = 0
+        # Nur leicht versetzt: ~2 cm (≈76px) links vom Haus, ~3 cm (≈114px) darunter
+        self.isch_sprite.center_x = self.house_sprite.center_x - 189 - 38  # zusätzlich 1cm links
+        self.isch_sprite.center_y = self.house_sprite.center_y - 189 - 38  # zusätzlich 1cm unten
         self.decor_list.append(self.isch_sprite)
         self.touch_timer_isch = 0.0
         self.weapon_upgraded = False
@@ -158,10 +154,7 @@ class SurvivalGame(arcade.Window):
         self.last_energy_int = int(self.energy)
         self.portal_x = 0
         self.portal_y = MAP_HEIGHT // 2 - 220
-        self.portal_sprite = arcade.Sprite(str(IMG_DIR / "portal.png"), scale=0.8)
-        self.portal_sprite.center_x = self.portal_x
-        self.portal_sprite.center_y = self.portal_y
-        self.portal_list.append(self.portal_sprite)
+        self.portal_sprite = None  # portal.png entfernt
 
         # Spawner entfallen; Gegner werden zufällig am Kartenrand erzeugt
         self.spawners = []
@@ -268,8 +261,7 @@ class SurvivalGame(arcade.Window):
                 return
             bx, by, bw, bh = self.ui_rects["upgrade_buy"]
             if bx <= x <= bx + bw and by <= y <= by + bh and self.wood >= 100 and not self.weapon_upgraded:
-                self.wood -= 100
-                self.weapon_upgraded = True
+                # Placeholder: aktuell keine Wirkung beim Aufleveln
                 self.state = "game"
                 return
 
@@ -655,8 +647,8 @@ class SurvivalGame(arcade.Window):
                                      center_x=start_x,
                                      center_y=start_y)
         bullet.alpha = 255
-        bullet.change_x = dir_x * 170  # +20 px/s
-        bullet.change_y = dir_y * 170
+        bullet.change_x = dir_x * ((170 + (100/60)) + 50 + 100 + 300 + 120)
+        bullet.change_y = dir_y * ((170 + (100/60)) + 50 + 100 + 300 + 120)
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
@@ -711,6 +703,20 @@ class SurvivalGame(arcade.Window):
                 self.start_wave()
         else:
             self.wave_auto_timer = 20.0
+
+        # Upgrade-Trigger (isch berühren für 1s)
+        if arcade.check_for_collision(self.player, self.isch_sprite):
+            self.touch_timer_isch += delta_time
+            if self.touch_timer_isch >= 3.0 and self.state == "game":
+                self.touch_timer_isch = 0.0
+                self.state = "upgrade"
+                # Spieler ins Haus zurücksetzen
+                self.player.center_x = self.house_sprite.center_x
+                self.player.center_y = self.house_sprite.center_y - 200
+        else:
+            if self.state == "upgrade":
+                self.state = "game"
+            self.touch_timer_isch = 0.0
 
         # Bullets bewegen und Lebensdauer prüfen
         for bullet in list(self.bullet_list):
@@ -969,6 +975,9 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
+            arcade.draw_text(f"🪵 Holz: {int(self.wood)}",
+                             hud_left_x, hud_left_y - 80,
+                             arcade.color.BROWN_NOSE, 20)
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
@@ -1077,6 +1086,29 @@ class SurvivalGame(arcade.Window):
                              bx + bw / 2, by + bh / 2,
                              arcade.color.WHITE, 28,
                              anchor_x="center", anchor_y="center")
+
+        elif self.state == "upgrade":
+            arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, (0, 0, 0, 200))
+            arcade.draw_text("WAFFE UPGRADEN",
+                             self.width / 2, self.height - 180,
+                             arcade.color.WHITE, 56,
+                             anchor_x="center")
+            need_text = "Benötigt 100 Holz"
+            enough = self.wood >= 100 and not self.weapon_upgraded
+            need_color = arcade.color.SPRING_GREEN if enough else arcade.color.RED
+            arcade.draw_text(need_text,
+                             self.width / 2, self.height - 260,
+                             need_color, 32,
+                             anchor_x="center")
+            bx, by, bw, bh = self.ui_rects["upgrade_buy"]
+            buy_level = self.ease(self.hover_level.get("upgrade_buy", 0.0))
+            buy_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, buy_level)
+            self.draw_scaled_rect(bx, by, bw, bh, buy_color, buy_level, scale_factor=0.12)
+            arcade.draw_text("Kaufen",
+                             bx + bw/2, by + bh/2,
+                             need_color, 28,
+                             anchor_x="center", anchor_y="center")
+            # Kein separater Verlassen-Button mehr
 
         elif self.state == "settings":
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, (0, 0, 0, 220))
