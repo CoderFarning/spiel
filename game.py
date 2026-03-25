@@ -37,6 +37,7 @@ class SurvivalGame(arcade.Window):
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
+        self.touch_timer_isch = 0.0
         self.mouse_x = 0
         self.mouse_y = 0
         self.admin_focus = False
@@ -138,6 +139,17 @@ class SurvivalGame(arcade.Window):
         self.player.center_y = self.house_sprite.center_y - 200  # 10 Blöcke unter dem Haus
         self.player_list.append(self.player)
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
+        # Upgrade-Objekt isch.png
+        try:
+            self.isch_sprite = arcade.Sprite(str(IMG_DIR / "isch.png"), scale=0.3)
+        except Exception:
+            self.isch_sprite = arcade.Sprite(center_x=200, center_y=0, scale=0.3)
+        self.isch_sprite.center_x = 200
+        self.isch_sprite.center_y = 0
+        self.decor_list.append(self.isch_sprite)
+        self.touch_timer_isch = 0.0
+        self.weapon_upgraded = False
+        self.wood = 120  # Startwert
 
         self.player_health = 1_000_000
         self.shots_left = float("inf")
@@ -245,14 +257,20 @@ class SurvivalGame(arcade.Window):
                 self.state = "info"
                 return
 
-            bx, by, bw, bh = self.ui_rects["settings_button"]
-            bx, by, bw, bh = self.ui_rects["house_upgrades"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
-                self.house_upgrades_on = not self.house_upgrades_on
-                return
-
             if button == arcade.MOUSE_BUTTON_LEFT:
                 self.fire_bullet(x, y)
+                return
+
+        elif self.state == "upgrade":
+            bx, by, bw, bh = self.ui_rects["upgrade_close"]
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self.state = "game"
+                return
+            bx, by, bw, bh = self.ui_rects["upgrade_buy"]
+            if bx <= x <= bx + bw and by <= y <= by + bh and self.wood >= 100 and not self.weapon_upgraded:
+                self.wood -= 100
+                self.weapon_upgraded = True
+                self.state = "game"
                 return
 
         elif self.state == "info":
@@ -474,14 +492,11 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["info_button"] = (self.width - 110, self.height - 190, 90, 90)
         # Settings deaktiviert, aber KeyError vermeiden
         self.ui_rects["settings_button"] = (0, 0, 0, 0)
-        # Haus-Upgrades-Schalter links oben, weiter unten; Breite passt sich an Text an
-        switch_w, switch_h = 70, 30
-        text_sample = arcade.Text("Haus Upgrades anzeigen", 0, 0, arcade.color.WHITE, 18, anchor_y="center")
-        bw = switch_w + 12 + text_sample.content_width + 16
-        bh = max(44, max(switch_h + 12, text_sample.content_height + 16))
-        bx = 20
-        by = self.height - 182  # 5px weiter hoch (insg. +8)
-        self.ui_rects["house_upgrades"] = (bx, by, bw, bh)
+        # Upgrade-Fenster Buttons
+        self.ui_rects["upgrade_close"] = (self.width/2 + 160, self.height/2 + 140, 140, 60)
+        self.ui_rects["upgrade_buy"] = (self.width/2 - 100, self.height/2 - 40, 200, 70)
+        # Haus-Upgrades-Schalter deaktiviert
+        self.ui_rects["house_upgrades"] = (0, 0, 0, 0)
 
         # Info overlay
         self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
@@ -534,11 +549,15 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             active_keys = ["start_button"]
         elif self.state == "game":
-            active_keys = ["wave_button", "info_button", "house_upgrades"]
+            active_keys = ["wave_button", "info_button"]
         elif self.state == "info":
             active_keys = ["info_back"]
         elif self.state == "settings":
             active_keys = []
+        elif self.state == "upgrade":
+            active_keys = ["upgrade_close"]
+            if self.wood >= 100 and not self.weapon_upgraded:
+                active_keys.append("upgrade_buy")
         elif self.state == "shop":
             active_keys = ["shop_buy_one", "shop_energy", "shop_leave"]
             if not self.auto_shot_owned:
@@ -629,16 +648,15 @@ class SurvivalGame(arcade.Window):
             return
         dir_x = dx / dist
         dir_y = dy / dist
-        # Schuss startet leicht rechts der Mitte, 30px über dem oberen Spielerrand
-        start_x = self.player.center_x + 1
-        start_y = self.player.center_y + self.player.height / 2 + 30
+        # Schuss startet ~5mm rechts vom linken Rand (~19px) und ~1.5cm unterhalb des oberen Spielerrands (~57px)
+        start_x = self.player.center_x - self.player.width / 2 + 30
+        start_y = self.player.center_y + self.player.height / 2 - 57
         bullet = arcade.SpriteCircle(9.3, arcade.color.ORANGE_PEEL,
                                      center_x=start_x,
                                      center_y=start_y)
         bullet.alpha = 255
-        # 15 px/ms => 15000 px/s
-        bullet.change_x = dir_x * 15000
-        bullet.change_y = dir_y * 15000
+        bullet.change_x = dir_x * 170  # +20 px/s
+        bullet.change_y = dir_y * 170
         bullet.life_time = 1.0
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
@@ -951,25 +969,6 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
-            # Haus-Upgrades-Schalter
-            bx, by, bw, bh = self.ui_rects["house_upgrades"]
-            lvl_switch = self.ease(self.hover_level.get("house_upgrades", 0.0))
-            switch_w, switch_h = 70, 30
-            switch_x = bx + 10
-            switch_y = by + (bh - switch_h) / 2
-            # Hintergrund des Klickbereichs
-            self.draw_scaled_rect(bx, by, bw, bh, (30, 30, 30), lvl_switch, scale_factor=0.08)
-            # eigentlicher Schalter
-            state_color = arcade.color.SPRING_GREEN if self.house_upgrades_on else arcade.color.GRAY
-            arcade.draw_lbwh_rectangle_filled(switch_x, switch_y, switch_w, switch_h, state_color)
-            arcade.draw_lbwh_rectangle_outline(switch_x, switch_y, switch_w, switch_h, arcade.color.BLACK, border_width=2)
-            knob_r = switch_h / 2 - 3
-            knob_x = switch_x + (switch_w - knob_r - 3) if self.house_upgrades_on else switch_x + knob_r + 3
-            arcade.draw_circle_filled(knob_x, switch_y + switch_h/2, knob_r, arcade.color.WHITE)
-            arcade.draw_text("Haus Upgrades anzeigen",
-                             switch_x + switch_w + 16, by + bh/2,
-                             arcade.color.WHITE, 18,
-                             anchor_y="center")
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
