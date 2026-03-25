@@ -10,7 +10,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/20000)
+        self.set_update_rate(1/24000)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -213,6 +213,8 @@ class SurvivalGame(arcade.Window):
         if self.state == "game":
             if key == arcade.key.M:
                 self.show_minimap = not self.show_minimap
+            if key == arcade.key.KEY_1:
+                self.weapon_equipped = not self.weapon_equipped
         elif self.state == "info":
             if key == arcade.key.ESCAPE:
                 self.state = "game"
@@ -562,8 +564,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 4500.0     # Federkonstante (extrem direkt)
-        d = 520.0      # Dämpfung für kontrolliertes Abklingen
+        k = 5000.0     # Federkonstante (extrem direkt)
+        d = 560.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -636,7 +638,7 @@ class SurvivalGame(arcade.Window):
 
     def fire_bullet(self, screen_x, screen_y):
         if not self.weapon_equipped:
-            pass
+            return
         # unendliche Munition: keine Prüfung nötig
         wx, wy = self.screen_to_world(screen_x, screen_y)
         dx = wx - self.player.center_x
@@ -655,7 +657,7 @@ class SurvivalGame(arcade.Window):
         bullet.alpha = 255
         bullet.change_x = dir_x * ((170 + (100/60)) + 50 + 100 + 300 + 120)
         bullet.change_y = dir_y * ((170 + (100/60)) + 50 + 100 + 300 + 120)
-        bullet.life_time = 1.0
+        bullet.life_time = 1e9  # quasi unendlich
         self.bullet_list.append(bullet)
         # unendliche Munition: kein Abzug
 
