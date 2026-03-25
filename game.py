@@ -38,7 +38,7 @@ class SurvivalGame(arcade.Window):
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
         self.touch_timer_isch = 0.0
-        self.wood = 0
+        self.gems = 0
         self.mouse_x = 0
         self.mouse_y = 0
         self.admin_focus = False
@@ -145,7 +145,6 @@ class SurvivalGame(arcade.Window):
         self.decor_list.append(self.isch_sprite)
         self.touch_timer_isch = 0.0
         self.weapon_upgraded = False
-        self.wood = 120  # Startwert
 
         self.player_health = 1_000_000
         self.shots_left = float("inf")
@@ -266,8 +265,8 @@ class SurvivalGame(arcade.Window):
                 self.state = "game"
                 return
             bx, by, bw, bh = self.ui_rects["upgrade_buy"]
-            if bx <= x <= bx + bw and by <= y <= by + bh and self.wood >= 100 and not self.weapon_upgraded:
-                self.wood -= 100
+            if bx <= x <= bx + bw and by <= y <= by + bh and self.gems >= 100 and not self.weapon_upgraded:
+                self.gems -= 100
                 self.weapon_upgraded = True
                 self.state = "game"
                 return
@@ -555,7 +554,7 @@ class SurvivalGame(arcade.Window):
             active_keys = []
         elif self.state == "upgrade":
             active_keys = ["upgrade_close"]
-            if self.wood >= 100 and not self.weapon_upgraded:
+            if self.gems >= 100 and not self.weapon_upgraded:
                 active_keys.append("upgrade_buy")
         elif self.state == "shop":
             active_keys = ["shop_buy_one", "shop_energy", "shop_leave"]
@@ -728,7 +727,7 @@ class SurvivalGame(arcade.Window):
                 enemy.texture = arcade.load_texture(str(IMG_DIR / "explosion.png"))
                 bullet.kill()
                 self.wave_kills += 1
-                self.wood += 1
+                self.gems += 1
                 break
 
         # Movement
@@ -969,9 +968,9 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"Haus Leben: {self.house_health}/{self.house_health_max}",
                              hud_left_x, hud_left_y - 40,
                              arcade.color.GREEN, 20)
-            arcade.draw_text(f"🪵 Holz: {int(self.wood)}",
+            arcade.draw_text(f"💎 Gems: {int(self.gems)}",
                              hud_left_x, hud_left_y - 80,
-                             arcade.color.BROWN_NOSE, 20)
+                             arcade.color.WHITE, 20)
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
@@ -1067,7 +1066,7 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 430,
                              arcade.color.WHITE, 24,
                              anchor_x="center")
-            arcade.draw_text("Holz: Anzeige oben links, +1 pro Gegner",
+            arcade.draw_text("Gems: Anzeige oben links, +1 pro Gegner",
                              self.width / 2, self.height - 480,
                              arcade.color.LIGHT_GRAY, 22,
                              anchor_x="center")
@@ -1087,8 +1086,8 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 180,
                              arcade.color.WHITE, 56,
                              anchor_x="center")
-            need_text = "Benötigt 100 Holz"
-            enough = self.wood >= 100 and not self.weapon_upgraded
+            need_text = "Benötigt 100 Gems"
+            enough = self.gems >= 100 and not self.weapon_upgraded
             need_color = arcade.color.SPRING_GREEN if enough else arcade.color.RED
             arcade.draw_text(need_text,
                              self.width / 2, self.height - 260,
