@@ -11,7 +11,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/48000)
+        self.set_update_rate(1/60000)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -639,8 +639,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 7000.0     # Federkonstante (noch direkter)
-        d = 700.0      # Dämpfung für kontrolliertes Abklingen
+        k = 8200.0     # Federkonstante (noch direkter)
+        d = 780.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
