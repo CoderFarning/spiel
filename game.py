@@ -69,7 +69,7 @@ class SurvivalGame(arcade.Window):
         self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
         self.player_scale_armed = 0.4
-        self.player_scale_unarmed = 0.2
+        self.player_scale_unarmed = 0.3
         self.pistol_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.6)
         self.pistol_icon_list = arcade.SpriteList()
         self.pistol_icon_list.append(self.pistol_icon_sprite)
@@ -287,10 +287,8 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             bx, by, bw, bh = self.ui_rects["start_button"]
             if self.point_in_rect(x, y, (bx, by, bw, bh)):
-                if not self.player_name.strip():
+                if not self.name_confirmed:
                     return True
-                # automatisches Bestätigen, kein Doppelklick nötig
-                self.name_confirmed = True
                 self.setup_game()
                 self.state = "game"
                 self.start_prep()
@@ -611,7 +609,8 @@ class SurvivalGame(arcade.Window):
     def update_hover_levels(self, delta_time: float):
         active_keys = []
         if self.state == "menu":
-            active_keys = ["start_button"]
+            if self.name_confirmed:
+                active_keys = ["start_button"]
         elif self.state == "game":
             active_keys = ["wave_button", "info_button"]
         elif self.state == "info":
@@ -953,7 +952,7 @@ class SurvivalGame(arcade.Window):
             caret = "|" if self.caret_visible else ""
             bx, by, bw, bh = self.ui_rects["start_button"]
 
-            start_ready = bool(self.player_name.strip())
+            start_ready = self.name_confirmed
             if start_ready:
                 level = self.ease(self.hover_level.get("start_button", 0.0))
                 start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
@@ -964,7 +963,7 @@ class SurvivalGame(arcade.Window):
                                  anchor_x="center", anchor_y="center")
                 self.start_button = (bx, by, bw, bh)
             else:
-                arcade.draw_text("Name eingeben",
+                arcade.draw_text("Name eingeben und mit Enter bestätigen",
                                  self.width//2, self.height//2,
                                  arcade.color.LIGHT_GRAY, 24,
                                  anchor_x="center", anchor_y="center")
