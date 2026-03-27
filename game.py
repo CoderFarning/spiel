@@ -1,6 +1,7 @@
 import arcade
 import math
 import random
+import time
 
 from constants import *
 from enemy import Enemy
@@ -41,6 +42,7 @@ class SurvivalGame(arcade.Window):
         self.gems = 0
         self.mouse_x = 0
         self.mouse_y = 0
+        self._pending_release_dedupe = None
         self.admin_focus = False
         self.admin_message = ""
         self.admin_message_timer = 0.0
@@ -58,10 +60,17 @@ class SurvivalGame(arcade.Window):
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = None  # wird nicht mehr benutzt
         self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
+        self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
+        self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
+        self.player_scale_armed = 0.4
+        self.player_scale_unarmed = 0.2
         self.pistol_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.6)
         self.pistol_icon_list = arcade.SpriteList()
         self.pistol_icon_list.append(self.pistol_icon_sprite)
-        self.weapon_equipped = True  # standardmäßig ausgerüstet, damit erster Klick sofort schießt
+        self.upgrade_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.7)
+        self.upgrade_icon_list = arcade.SpriteList()
+        self.upgrade_icon_list.append(self.upgrade_icon_sprite)
+        self.weapon_equipped = False  # Start: Waffe abgerüstet
         self.wave_auto_timer = 20.0
         self.house_upgrades_on = False
 
@@ -129,7 +138,8 @@ class SurvivalGame(arcade.Window):
         self.house_sprite.center_y = 0
         self.decor_list.append(self.house_sprite)
 
-        self.player = arcade.Sprite(str(IMG_DIR / "spieler.png"), scale=0.4)
+        self.weapon_equipped = False
+        self.player = arcade.Sprite(str(IMG_DIR / "spielerB.png"), scale=self.player_scale_unarmed)
         self.player.center_x = self.house_sprite.center_x
         self.player.center_y = self.house_sprite.center_y - 200  # 10 Blöcke unter dem Haus
         self.player_list.append(self.player)
@@ -215,6 +225,12 @@ class SurvivalGame(arcade.Window):
                 self.show_minimap = not self.show_minimap
             if key == arcade.key.KEY_1:
                 self.weapon_equipped = not self.weapon_equipped
+                if self.weapon_equipped:
+                    self.player.texture = self.player_texture_armed
+                    self.player.scale = self.player_scale_armed
+                else:
+                    self.player.texture = self.player_texture_unarmed
+                    self.player.scale = self.player_scale_unarmed
         elif self.state == "info":
             if key == arcade.key.ESCAPE:
                 self.state = "game"
@@ -230,54 +246,70 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def on_mouse_press(self, x, y, button, modifiers):
+    def point_in_rect(self, x, y, rect, padding=24):
+        bx, by, bw, bh = rect
+        return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
+
+    def point_on_sprite(self, x, y, sprite, padding=28):
+        if sprite is None:
+            return False
+        left = sprite.center_x - sprite.width / 2 - padding
+        right = sprite.center_x + sprite.width / 2 + padding
+        bottom = sprite.center_y - sprite.height / 2 - padding
+        top = sprite.center_y + sprite.height / 2 + padding
+        return left <= x <= right and bottom <= y <= top
+
+    def _handle_click(self, x, y, button):
         self.ensure_ui_rects()
         self.mouse_x = x
         self.mouse_y = y
 
         if self.state == "menu":
             bx, by, bw, bh = self.ui_rects["start_button"]
-            if self.name_confirmed and bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 if not self.player_name.strip():
-                    return
+                    return True
+                # automatisches Bestätigen, kein Doppelklick nötig
+                self.name_confirmed = True
                 self.setup_game()
                 self.state = "game"
                 self.start_prep()
-                return
+                return True
 
         elif self.state == "game":
+            wx, wy = self.screen_to_world(x, y)
             bx, by, bw, bh = self.ui_rects["info_button"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.state = "info"
-                return
+                return True
 
-            if (not self.wave_active) and self.isch_sprite and self.isch_sprite.collides_with_point((x, y)):
+            if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_sprite(wx, wy, self.isch_sprite):
                 self.state = "upgrade"
                 self.player.center_x = self.house_sprite.center_x
                 self.player.center_y = self.house_sprite.center_y - 200
-                return
+                return True
 
             if button == arcade.MOUSE_BUTTON_LEFT:
                 self.fire_bullet(x, y)
-                return
+                return True
 
         elif self.state == "upgrade":
             bx, by, bw, bh = self.ui_rects["upgrade_close"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.state = "game"
-                return
+                return True
             bx, by, bw, bh = self.ui_rects["upgrade_buy"]
-            if bx <= x <= bx + bw and by <= y <= by + bh and self.gems >= 100 and not self.weapon_upgraded:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)) and self.gems >= 100 and not self.weapon_upgraded:
                 self.gems -= 100
                 self.weapon_upgraded = True
                 self.state = "game"
-                return
+                return True
 
         elif self.state == "info":
             bx, by, bw, bh = self.ui_rects["info_back"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.state = "game"
-                return
+                return True
 
         elif self.state == "settings":
             # Eingabefeld Fokus setzen
@@ -288,33 +320,45 @@ class SurvivalGame(arcade.Window):
                 self.admin_focus = False
 
             # Settings-Fenster deaktiviert – keine Interaktion
-            return
+            return True
 
         elif self.state == "shop":
             bx, by, bw, bh = self.ui_rects["shop_leave"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.leave_shop()
-                return
+                return True
 
             bx, by, bw, bh = self.ui_rects["shop_buy_one"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.buy_ammo(1)
-                return
+                return True
 
             bx, by, bw, bh = self.ui_rects["shop_energy"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.buy_energy()
-                return
+                return True
 
             bx, by, bw, bh = self.ui_rects["shop_auto"]
-            if bx <= x <= bx + bw and by <= y <= by + bh:
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.buy_auto_shot()
-                return
+                return True
 
         elif self.state == "gameover":
             self.state = "menu"
             self.stop_bg()
             self.stop_shop_sound()
+            return True
+
+        return False
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        return self._handle_click(x, y, button)
+
+    def on_mouse_release(self, x, y, button, modifiers):
+        # Klicks werden bewusst nur auf mouse_press verarbeitet,
+        # damit niemals ein zweiter Ausloeser aus mouse_release entsteht.
+        self._pending_release_dedupe = None
+        return True
 
     def on_text(self, text: str):
         if self.state == "settings" and self.admin_focus:
@@ -889,7 +933,8 @@ class SurvivalGame(arcade.Window):
             caret = "|" if self.caret_visible else ""
             bx, by, bw, bh = self.ui_rects["start_button"]
 
-            if self.name_confirmed:
+            start_ready = bool(self.player_name.strip())
+            if start_ready:
                 level = self.ease(self.hover_level.get("start_button", 0.0))
                 start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
                 self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.28)
@@ -899,7 +944,7 @@ class SurvivalGame(arcade.Window):
                                  anchor_x="center", anchor_y="center")
                 self.start_button = (bx, by, bw, bh)
             else:
-                arcade.draw_text("Name eingeben und mit Enter bestätigen",
+                arcade.draw_text("Name eingeben",
                                  self.width//2, self.height//2,
                                  arcade.color.LIGHT_GRAY, 24,
                                  anchor_x="center", anchor_y="center")
@@ -1068,8 +1113,12 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 430,
                              arcade.color.WHITE, 24,
                              anchor_x="center")
-            arcade.draw_text("Gems: Anzeige oben links, +1 pro Gegner",
-                             self.width / 2, self.height - 480,
+            arcade.draw_text("Gems: Anzeige oben links, +3 pro Gegner",
+                             self.width / 2, self.height - 470,
+                             arcade.color.LIGHT_GRAY, 22,
+                             anchor_x="center")
+            arcade.draw_text("Waffe ein/aus: Taste 1",
+                             self.width / 2, self.height - 505,
                              arcade.color.LIGHT_GRAY, 22,
                              anchor_x="center")
 
@@ -1096,10 +1145,10 @@ class SurvivalGame(arcade.Window):
                              need_color, 32,
                              anchor_x="center")
             # Waffe anzeigen (pistole.png)
-            if self.pistol_texture:
-                tex_w = self.pistol_texture.width * 0.7
-                tex_h = self.pistol_texture.height * 0.7
-                arcade.draw_texture_rectangle(self.width/2, self.height - 340, tex_w, tex_h, self.pistol_texture)
+            if self.upgrade_icon_sprite:
+                self.upgrade_icon_sprite.center_x = self.width/2
+                self.upgrade_icon_sprite.center_y = self.height - 340
+                self.upgrade_icon_list.draw()
             bx, by, bw, bh = self.ui_rects["upgrade_buy"]
             buy_level = self.ease(self.hover_level.get("upgrade_buy", 0.0))
             buy_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, buy_level)
