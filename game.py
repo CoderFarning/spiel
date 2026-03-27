@@ -2,7 +2,6 @@ import arcade
 import math
 import random
 import time
-from pathlib import Path
 
 from constants import *
 from enemy import Enemy
@@ -12,7 +11,7 @@ class SurvivalGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
         # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/36000)
+        self.set_update_rate(1/48000)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -69,7 +68,7 @@ class SurvivalGame(arcade.Window):
         self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
         self.player_scale_armed = 0.4
-        self.player_scale_unarmed = 0.3
+        self.player_scale_unarmed = 0.4
         self.pistol_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.6)
         self.pistol_icon_list = arcade.SpriteList()
         self.pistol_icon_list.append(self.pistol_icon_sprite)
@@ -106,10 +105,7 @@ class SurvivalGame(arcade.Window):
         self.bg_player = None
         self.cached_energy_cost = None
         try:
-            ui_icon_path = IMG_DIR / "system.png"
-            if not Path(ui_icon_path).exists():
-                ui_icon_path = IMG_DIR / "info.png"
-            self.info_sprite = arcade.Sprite(str(ui_icon_path), scale=1.0)
+            self.info_sprite = arcade.Sprite(str(IMG_DIR / "info.png"), scale=1.0)
             self.info_sprite_list = arcade.SpriteList()
             self.info_sprite_list.append(self.info_sprite)
         except Exception:
@@ -272,6 +268,22 @@ class SurvivalGame(arcade.Window):
         top = sprite.center_y + sprite.height / 2 + padding
         return left <= x <= right and bottom <= y <= top
 
+    def point_on_tisch(self, x, y):
+        if self.isch_sprite is None:
+            return False
+        try:
+            if self.isch_sprite.collides_with_point((x, y)):
+                return True
+        except Exception:
+            pass
+
+        # Fallback: enger an der sichtbaren Schmiede als an der transparenten Textur.
+        half_w = self.isch_sprite.width * 0.34
+        half_h = self.isch_sprite.height * 0.18
+        center_x = self.isch_sprite.center_x
+        center_y = self.isch_sprite.center_y - self.isch_sprite.height * 0.02
+        return (center_x - half_w) <= x <= (center_x + half_w) and (center_y - half_h) <= y <= (center_y + half_h)
+
     def change_zoom(self, delta):
         self.camera_zoom = max(0.4, min(2.4, self.camera_zoom + delta))
         try:
@@ -301,7 +313,7 @@ class SurvivalGame(arcade.Window):
                 self.state = "info"
                 return True
 
-            if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_sprite(wx, wy, self.isch_sprite, padding=120):
+            if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_tisch(wx, wy):
                 self.state = "upgrade"
                 self.player.center_x = self.house_sprite.center_x
                 self.player.center_y = self.house_sprite.center_y - 200
@@ -627,8 +639,8 @@ class SurvivalGame(arcade.Window):
                 active_keys.append("shop_auto")
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 6000.0     # Federkonstante (extrem direkt)
-        d = 640.0      # Dämpfung für kontrolliertes Abklingen
+        k = 7000.0     # Federkonstante (noch direkter)
+        d = 700.0      # Dämpfung für kontrolliertes Abklingen
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
