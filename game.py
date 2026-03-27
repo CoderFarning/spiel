@@ -2,6 +2,7 @@ import arcade
 import math
 import random
 import time
+from pathlib import Path
 
 from constants import *
 from enemy import Enemy
@@ -16,6 +17,11 @@ class SurvivalGame(arcade.Window):
 
         self.state = "menu"
         self.camera = arcade.Camera2D()
+        self.camera_zoom = 1.0
+        try:
+            self.camera.zoom = self.camera_zoom
+        except Exception:
+            pass
         self.keys = set()
 
         self.wave_active = False
@@ -100,7 +106,10 @@ class SurvivalGame(arcade.Window):
         self.bg_player = None
         self.cached_energy_cost = None
         try:
-            self.info_sprite = arcade.Sprite(str(IMG_DIR / "info.png"), scale=1.0)
+            ui_icon_path = IMG_DIR / "system.png"
+            if not Path(ui_icon_path).exists():
+                ui_icon_path = IMG_DIR / "info.png"
+            self.info_sprite = arcade.Sprite(str(ui_icon_path), scale=1.0)
             self.info_sprite_list = arcade.SpriteList()
             self.info_sprite_list.append(self.info_sprite)
         except Exception:
@@ -223,6 +232,10 @@ class SurvivalGame(arcade.Window):
         if self.state == "game":
             if key == arcade.key.M:
                 self.show_minimap = not self.show_minimap
+            if key == arcade.key.O:
+                self.change_zoom(-0.1)
+            if key == arcade.key.I:
+                self.change_zoom(0.1)
             if key == arcade.key.KEY_1:
                 self.weapon_equipped = not self.weapon_equipped
                 if self.weapon_equipped:
@@ -259,6 +272,13 @@ class SurvivalGame(arcade.Window):
         top = sprite.center_y + sprite.height / 2 + padding
         return left <= x <= right and bottom <= y <= top
 
+    def change_zoom(self, delta):
+        self.camera_zoom = max(0.4, min(2.4, self.camera_zoom + delta))
+        try:
+            self.camera.zoom = self.camera_zoom
+        except Exception:
+            pass
+
     def _handle_click(self, x, y, button):
         self.ensure_ui_rects()
         self.mouse_x = x
@@ -283,7 +303,7 @@ class SurvivalGame(arcade.Window):
                 self.state = "info"
                 return True
 
-            if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_sprite(wx, wy, self.isch_sprite):
+            if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_sprite(wx, wy, self.isch_sprite, padding=120):
                 self.state = "upgrade"
                 self.player.center_x = self.house_sprite.center_x
                 self.player.center_y = self.house_sprite.center_y - 200
@@ -1109,16 +1129,20 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 380,
                              arcade.color.WHITE, 28,
                              anchor_x="center")
+            arcade.draw_text("Zoom: O raus, I rein",
+                             self.width / 2, self.height - 415,
+                             arcade.color.WHITE, 26,
+                             anchor_x="center")
             arcade.draw_text("Tisch: anklicken (nur außerhalb von Wellen) für Upgrade",
-                             self.width / 2, self.height - 430,
+                             self.width / 2, self.height - 455,
                              arcade.color.WHITE, 24,
                              anchor_x="center")
             arcade.draw_text("Gems: Anzeige oben links, +3 pro Gegner",
-                             self.width / 2, self.height - 470,
+                             self.width / 2, self.height - 495,
                              arcade.color.LIGHT_GRAY, 22,
                              anchor_x="center")
             arcade.draw_text("Waffe ein/aus: Taste 1",
-                             self.width / 2, self.height - 505,
+                             self.width / 2, self.height - 530,
                              arcade.color.LIGHT_GRAY, 22,
                              anchor_x="center")
 
