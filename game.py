@@ -59,6 +59,10 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_owned = False
         self.auto_shot_cooldown = 0.0
         self.auto_shot_waves_left = 0
+        self.weapon_shot_cooldown = 0.0
+        self.weapon_hold_timer = 0.0
+        self.mouse_left_down = False
+        self.weapon_level = 1
         self.wave_auto_timer = 20.0
         self.player_name = ""
         self.name_confirmed = False
@@ -159,7 +163,11 @@ class SurvivalGame(arcade.Window):
         self.isch_sprite.center_y = self.house_sprite.center_y - 189 - 38  # zusätzlich 1cm unten
         self.decor_list.append(self.isch_sprite)
         self.touch_timer_isch = 0.0
+        self.weapon_level = 1
         self.weapon_upgraded = False
+        self.weapon_shot_cooldown = 0.0
+        self.weapon_hold_timer = 0.0
+        self.mouse_left_down = False
 
         self.player_health = 1_000_000
         self.shots_left = float("inf")
@@ -291,6 +299,30 @@ class SurvivalGame(arcade.Window):
         except Exception:
             pass
 
+    def get_weapon_upgrade_cost(self):
+        costs = [150, 750, 7500, 10000]
+        if 1 <= self.weapon_level <= len(costs):
+            return costs[self.weapon_level - 1]
+        return None
+
+    def get_weapon_cooldown(self):
+        if self.weapon_level == 1:
+            return 0.5
+        if self.weapon_level == 2:
+            return 0.3
+        return 0.0
+
+    def get_weapon_status_text(self):
+        if self.weapon_level == 1:
+            return "1 Schuss, 0.5s Cooldown"
+        if self.weapon_level == 2:
+            return "3 Schüsse, 0.3s Cooldown"
+        if self.weapon_level == 3:
+            return "3 Schüsse, kein Cooldown"
+        if self.weapon_level == 4:
+            return "3 Schüsse, kein Cooldown"
+        return "3 Schüsse, halten für Dauerfeuer"
+
     def _handle_click(self, x, y, button):
         self.ensure_ui_rects()
         self.mouse_x = x
@@ -329,9 +361,19 @@ class SurvivalGame(arcade.Window):
                 self.state = "game"
                 return True
             bx, by, bw, bh = self.ui_rects["upgrade_buy"]
-            if self.point_in_rect(x, y, (bx, by, bw, bh)) and self.gems >= 100 and not self.weapon_upgraded:
-                self.gems -= 100
-                self.weapon_upgraded = True
+            weapon_cost = self.get_weapon_upgrade_cost()
+            if self.point_in_rect(x, y, (bx, by, bw, bh)) and weapon_cost is not None and self.gems >= weapon_cost:
+                self.gems -= weapon_cost
+                self.weapon_level += 1
+                self.weapon_upgraded = self.weapon_level > 1
+                self.state = "game"
+                return True
+            bx, by, bw, bh = self.ui_rects["upgrade_targeter"]
+            if self.point_in_rect(x, y, (bx, by, bw, bh)) and self.gems >= 300 and not self.auto_shot_owned:
+                self.gems -= 300
+                self.auto_shot_owned = True
+                self.auto_shot_waves_left = 2
+                self.auto_shot_cooldown = 0.0
                 self.state = "game"
                 return True
 
@@ -382,11 +424,15 @@ class SurvivalGame(arcade.Window):
         return False
 
     def on_mouse_press(self, x, y, button, modifiers):
+        if button == arcade.MOUSE_BUTTON_LEFT:
+            self.mouse_left_down = True
         return self._handle_click(x, y, button)
 
     def on_mouse_release(self, x, y, button, modifiers):
         # Klicks werden bewusst nur auf mouse_press verarbeitet,
         # damit niemals ein zweiter Ausloeser aus mouse_release entsteht.
+        if button == arcade.MOUSE_BUTTON_LEFT:
+            self.mouse_left_down = False
         self._pending_release_dedupe = None
         return True
 
@@ -469,13 +515,12 @@ class SurvivalGame(arcade.Window):
         self.compute_shop_rects()
 
     def buy_auto_shot(self):
-        if self.auto_shot_owned:
+        if self.auto_shot_owned or self.gems < 300:
             return
-        if self.total_coins < 100:
-            return
-        self.total_coins -= 100
+        self.gems -= 300
         self.auto_shot_owned = True
         self.auto_shot_waves_left = 2
+        self.auto_shot_cooldown = 0.0
 
     def start_bg(self):
         if not self.bg_player:
@@ -569,6 +614,7 @@ class SurvivalGame(arcade.Window):
         # Upgrade-Fenster Buttons
         self.ui_rects["upgrade_close"] = (40, 40, 160, 60)  # unten links
         self.ui_rects["upgrade_buy"] = (self.width/2 - 100, self.height/2 - 40, 200, 70)
+        self.ui_rects["upgrade_targeter"] = (self.width/2 - 140, self.height/2 - 150, 280, 70)
         # Haus-Upgrades-Schalter deaktiviert
         self.ui_rects["house_upgrades"] = (0, 0, 0, 0)
 
@@ -631,8 +677,10 @@ class SurvivalGame(arcade.Window):
             active_keys = []
         elif self.state == "upgrade":
             active_keys = ["upgrade_close"]
-            if self.gems >= 100 and not self.weapon_upgraded:
+            if self.get_weapon_upgrade_cost() is not None and self.gems >= self.get_weapon_upgrade_cost():
                 active_keys.append("upgrade_buy")
+            if self.gems >= 300 and not self.auto_shot_owned:
+                active_keys.append("upgrade_targeter")
         elif self.state == "shop":
             active_keys = ["shop_buy_one", "shop_energy", "shop_leave"]
             if not self.auto_shot_owned:
@@ -664,6 +712,14 @@ class SurvivalGame(arcade.Window):
             self.auto_shot_cooldown -= delta_time
             if self.auto_shot_cooldown < 0:
                 self.auto_shot_cooldown = 0.0
+        if self.weapon_shot_cooldown > 0:
+            self.weapon_shot_cooldown -= delta_time
+            if self.weapon_shot_cooldown < 0:
+                self.weapon_shot_cooldown = 0.0
+        if self.weapon_hold_timer > 0:
+            self.weapon_hold_timer -= delta_time
+            if self.weapon_hold_timer < 0:
+                self.weapon_hold_timer = 0.0
     def on_resize(self, width, height):
         super().on_resize(width, height)
         self._ui_dirty = True
@@ -711,30 +767,55 @@ class SurvivalGame(arcade.Window):
         if self.auto_shot_owned and self.auto_shot_waves_left <= 0:
             self.auto_shot_owned = False
 
-    def fire_bullet(self, screen_x, screen_y):
+    def fire_bullet_towards(self, target_x, target_y, apply_cooldown=True):
         if not self.weapon_equipped:
-            return
-        # unendliche Munition: keine Prüfung nötig
-        wx, wy = self.screen_to_world(screen_x, screen_y)
-        dx = wx - self.player.center_x
-        dy = wy - self.player.center_y
+            return False
+        if apply_cooldown and self.weapon_shot_cooldown > 0:
+            return False
+        dx = target_x - self.player.center_x
+        dy = target_y - self.player.center_y
         dist = math.hypot(dx, dy)
         if dist == 0:
-            return
+            return False
         dir_x = dx / dist
         dir_y = dy / dist
         # Schuss startet ~5mm rechts vom linken Rand (~19px) und ~1.5cm unterhalb des oberen Spielerrands (~57px)
         start_x = self.player.center_x - self.player.width / 2 + 30
         start_y = self.player.center_y + self.player.height / 2 - 57
-        bullet = arcade.SpriteCircle(9.3, arcade.color.ORANGE_PEEL,
-                                     center_x=start_x,
-                                     center_y=start_y)
-        bullet.alpha = 255
-        bullet.change_x = dir_x * ((170 + (100/60)) + 50 + 100 + 300 + 120)
-        bullet.change_y = dir_y * ((170 + (100/60)) + 50 + 100 + 300 + 120)
-        bullet.life_time = 1e9  # quasi unendlich
-        self.bullet_list.append(bullet)
-        # unendliche Munition: kein Abzug
+
+        bullet_speed = ((170 + (100/60)) + 50 + 100 + 300 + 120)
+
+        def spawn_single_bullet(local_dir_x, local_dir_y):
+            bullet = arcade.SpriteCircle(9.3, arcade.color.ORANGE_PEEL,
+                                         center_x=start_x,
+                                         center_y=start_y)
+            bullet.alpha = 255
+            bullet.change_x = local_dir_x * bullet_speed
+            bullet.change_y = local_dir_y * bullet_speed
+            bullet.life_time = 1e9  # quasi unendlich
+            self.bullet_list.append(bullet)
+
+        if self.weapon_level == 1:
+            spawn_single_bullet(dir_x, dir_y)
+            if apply_cooldown:
+                self.weapon_shot_cooldown = self.get_weapon_cooldown()
+            return True
+
+        spread_angle = 0.12
+        base_angle = math.atan2(dir_y, dir_x)
+        for offset in (-spread_angle, 0.0, spread_angle):
+            angle = base_angle + offset
+            spawn_single_bullet(math.cos(angle), math.sin(angle))
+
+        if apply_cooldown:
+            cooldown = self.get_weapon_cooldown()
+            if cooldown > 0:
+                self.weapon_shot_cooldown = cooldown
+        return True
+
+    def fire_bullet(self, screen_x, screen_y):
+        wx, wy = self.screen_to_world(screen_x, screen_y)
+        return self.fire_bullet_towards(wx, wy, apply_cooldown=True)
 
     def on_close(self):
         self.stop_bg()
@@ -765,19 +846,29 @@ class SurvivalGame(arcade.Window):
         if self.state != "game":
             return
 
+        if arcade.key.O in self.keys:
+            self.change_zoom(-0.8 * delta_time)
+        if arcade.key.I in self.keys:
+            self.change_zoom(0.8 * delta_time)
+
         # Auto-Schuss auslösen, falls gekauft
         if self.auto_shot_owned and self.wave_active and self.auto_shot_cooldown <= 0:
-            in_range = False
+            target_enemy = None
+            target_dist = None
             for enemy in self.enemies:
                 if enemy.is_dying:
                     continue
                 dist = arcade.get_distance_between_sprites(self.player, enemy)
-                if dist <= SHOT_RADIUS:
-                    in_range = True
-                    break
-            if in_range:
-                self.radius_shot()
+                if dist <= SHOT_RADIUS and (target_dist is None or dist < target_dist):
+                    target_dist = dist
+                    target_enemy = enemy
+            if target_enemy is not None:
+                self.fire_bullet_towards(target_enemy.center_x, target_enemy.center_y, apply_cooldown=False)
                 self.auto_shot_cooldown = 0.4
+
+        if self.weapon_level >= 5 and self.mouse_left_down and self.weapon_hold_timer <= 0:
+            if self.fire_bullet(self.mouse_x, self.mouse_y):
+                self.weapon_hold_timer = 0.05
 
         # Auto-Start nach 20s Vorbereitung
         if not self.wave_active:
@@ -804,7 +895,7 @@ class SurvivalGame(arcade.Window):
                 enemy.texture = arcade.load_texture(str(IMG_DIR / "explosion.png"))
                 bullet.kill()
                 self.wave_kills += 1
-                self.gems += 3
+                self.gems += 10
                 break
 
         # Movement
@@ -915,6 +1006,11 @@ class SurvivalGame(arcade.Window):
                 self.house_health = max(0, self.house_health - 1)
                 if self.house_health <= 0:
                     self.house_destroyed = True
+                    self.wave_active = False
+                    self.stop_bg()
+                    self.stop_prep()
+                    self.state = "gameover"
+                    return
                 continue
 
             if arcade.check_for_collision(enemy, self.player):
@@ -1148,13 +1244,17 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 455,
                              arcade.color.WHITE, 24,
                              anchor_x="center")
-            arcade.draw_text("Gems: Anzeige oben links, +3 pro Gegner",
+            arcade.draw_text("Gems: Anzeige oben links, +10 pro Gegner",
                              self.width / 2, self.height - 495,
                              arcade.color.LIGHT_GRAY, 22,
                              anchor_x="center")
             arcade.draw_text("Waffe ein/aus: Taste 1",
                              self.width / 2, self.height - 530,
                              arcade.color.LIGHT_GRAY, 22,
+                             anchor_x="center")
+            arcade.draw_text("Upgrade: Waffe wird stärker, Zielsucher hält 2 Wellen",
+                             self.width / 2, self.height - 565,
+                             arcade.color.LIGHT_GRAY, 20,
                              anchor_x="center")
 
             bx, by, bw, bh = self.ui_rects["info_back"]
@@ -1172,12 +1272,23 @@ class SurvivalGame(arcade.Window):
                              self.width / 2, self.height - 180,
                              arcade.color.WHITE, 56,
                              anchor_x="center")
-            need_text = "Benötigt 100 Gems"
-            enough = self.gems >= 100 and not self.weapon_upgraded
-            need_color = arcade.color.SPRING_GREEN if enough else arcade.color.RED
+            weapon_cost = self.get_weapon_upgrade_cost()
+            if weapon_cost is None:
+                need_text = "Max Level erreicht"
+                enough = False
+                need_color = arcade.color.GOLD
+            else:
+                need_text = f"Benötigt {weapon_cost} Gems  |  Level {self.weapon_level} -> {self.weapon_level + 1}"
+                enough = self.gems >= weapon_cost
+                need_color = arcade.color.SPRING_GREEN if enough else arcade.color.RED
             arcade.draw_text(need_text,
                              self.width / 2, self.height - 260,
                              need_color, 32,
+                             anchor_x="center")
+            upgrade_hint = self.get_weapon_status_text()
+            arcade.draw_text(upgrade_hint,
+                             self.width / 2, self.height - 300,
+                             arcade.color.WHITE, 24,
                              anchor_x="center")
             # Waffe anzeigen (pistole.png)
             if self.upgrade_icon_sprite:
@@ -1191,6 +1302,16 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text("Kaufen",
                              bx + bw/2, by + bh/2,
                              need_color, 28,
+                             anchor_x="center", anchor_y="center")
+            bx, by, bw, bh = self.ui_rects["upgrade_targeter"]
+            target_level = self.ease(self.hover_level.get("upgrade_targeter", 0.0))
+            target_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, target_level)
+            self.draw_scaled_rect(bx, by, bw, bh, target_color, target_level, scale_factor=0.12)
+            zielsucher_color = arcade.color.SPRING_GREEN if (self.gems >= 300 and not self.auto_shot_owned) else arcade.color.RED
+            zielsucher_label = "Zielsucher 300 Gems (2 Wellen)" if not self.auto_shot_owned else "Zielsucher aktiv"
+            arcade.draw_text(zielsucher_label,
+                             bx + bw/2, by + bh/2,
+                             zielsucher_color if not self.auto_shot_owned else arcade.color.GOLD, 22,
                              anchor_x="center", anchor_y="center")
             bx, by, bw, bh = self.ui_rects["upgrade_close"]
             close_level = self.ease(self.hover_level.get("upgrade_close", 0.0))
