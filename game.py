@@ -10,8 +10,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Maximale Update-Rate für Eingabe-/Maus-Flüssigkeit
-        self.set_update_rate(1/60000)
+        # Hohe, aber stabile Eingaberate ohne die Last extremer Werte.
+        self.set_update_rate(1/480)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -263,11 +263,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=24):
+    def point_in_rect(self, x, y, rect, padding=36):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=28):
+    def point_on_sprite(self, x, y, sprite, padding=40):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -286,8 +286,8 @@ class SurvivalGame(arcade.Window):
             pass
 
         # Fallback: enger an der sichtbaren Schmiede als an der transparenten Textur.
-        half_w = self.isch_sprite.width * 0.34
-        half_h = self.isch_sprite.height * 0.18
+        half_w = self.isch_sprite.width * 0.38
+        half_h = self.isch_sprite.height * 0.22
         center_x = self.isch_sprite.center_x
         center_y = self.isch_sprite.center_y - self.isch_sprite.height * 0.02
         return (center_x - half_w) <= x <= (center_x + half_w) and (center_y - half_h) <= y <= (center_y + half_h)
@@ -703,8 +703,8 @@ class SurvivalGame(arcade.Window):
             active_keys = ["gameover_restart"]
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 8200.0     # Federkonstante (noch direkter)
-        d = 780.0      # Dämpfung für kontrolliertes Abklingen
+        k = 3000.0     # direkt, aber stabil
+        d = 180.0      # schnell genug ohne Jittern
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
