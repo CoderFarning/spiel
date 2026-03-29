@@ -344,6 +344,10 @@ class SurvivalGame(arcade.Window):
             if self.point_in_rect(x, y, (bx, by, bw, bh)):
                 self.state = "info"
                 return True
+            bx, by, bw, bh = self.ui_rects["prep_skip"]
+            if (not self.wave_active) and self.point_in_rect(x, y, (bx, by, bw, bh)):
+                self.start_wave()
+                return True
 
             if (not self.wave_active) and (not self.weapon_equipped) and self.point_on_tisch(wx, wy):
                 self.state = "upgrade"
@@ -416,9 +420,15 @@ class SurvivalGame(arcade.Window):
                 return True
 
         elif self.state == "gameover":
-            self.state = "menu"
-            self.stop_bg()
-            self.stop_shop_sound()
+            bx, by, bw, bh = self.ui_rects["gameover_restart"]
+            if self.point_in_rect(x, y, (bx, by, bw, bh)):
+                self.stop_bg()
+                self.stop_shop_sound()
+                self.stop_prep()
+                self.setup_game()
+                self.state = "game"
+                self.start_prep()
+                return True
             return True
 
         return False
@@ -607,6 +617,7 @@ class SurvivalGame(arcade.Window):
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
+        self.ui_rects["prep_skip"] = (self.width - 270, self.height - 52, 200, 44)
         # Info-Button oben rechts
         self.ui_rects["info_button"] = (self.width - 110, self.height - 190, 90, 90)
         # Settings deaktiviert, aber KeyError vermeiden
@@ -621,6 +632,7 @@ class SurvivalGame(arcade.Window):
         # Info overlay
         self.ui_rects["info_back"] = (self.width - 220, self.height - 90, 200, 60)
         self.ui_rects["settings_back"] = (self.width - 220, self.height - 90, 200, 60)
+        self.ui_rects["gameover_restart"] = (self.width / 2 - 140, self.height / 2 - 120, 280, 80)
         # Admin-Buttons (Settings unlocked)
         center_x = self.width / 2
         base_y = self.height - 360
@@ -671,6 +683,8 @@ class SurvivalGame(arcade.Window):
                 active_keys = ["start_button"]
         elif self.state == "game":
             active_keys = ["wave_button", "info_button"]
+            if not self.wave_active:
+                active_keys.append("prep_skip")
         elif self.state == "info":
             active_keys = ["info_back"]
         elif self.state == "settings":
@@ -685,6 +699,8 @@ class SurvivalGame(arcade.Window):
             active_keys = ["shop_buy_one", "shop_energy", "shop_leave"]
             if not self.auto_shot_owned:
                 active_keys.append("shop_auto")
+        elif self.state == "gameover":
+            active_keys = ["gameover_restart"]
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
         k = 8200.0     # Federkonstante (noch direkter)
@@ -1167,6 +1183,14 @@ class SurvivalGame(arcade.Window):
                                  self.width - 10, self.height - 15,
                                  arcade.color.GREEN, 34,
                                  anchor_x="right", anchor_y="top")
+                bx, by, bw, bh = self.ui_rects["prep_skip"]
+                skip_level = self.ease(self.hover_level.get("prep_skip", 0.0))
+                skip_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, skip_level)
+                self.draw_scaled_rect(bx, by, bw, bh, skip_color, skip_level, scale_factor=0.12)
+                self.draw_cached_text("prep_skip_label", "Überspringen",
+                                      bx + bw / 2, by + bh / 2,
+                                      arcade.color.WHITE, 22,
+                                      anchor_x="center", anchor_y="center")
 
             bx, by, bw, bh = self.ui_rects["info_button"]
             if self.info_sprite:
@@ -1395,7 +1419,15 @@ class SurvivalGame(arcade.Window):
 
         elif self.state == "gameover":
 
-            arcade.draw_text("GAME OVER",
-                             self.width//2, self.height//2,
-                             arcade.color.RED, 50,
-                             anchor_x="center")
+            self.draw_cached_text("gameover_title", "GAME OVER",
+                                  self.width//2, self.height//2 + 40,
+                                  arcade.color.RED, 50,
+                                  anchor_x="center")
+            bx, by, bw, bh = self.ui_rects["gameover_restart"]
+            restart_level = self.ease(self.hover_level.get("gameover_restart", 0.0))
+            restart_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, restart_level)
+            self.draw_scaled_rect(bx, by, bw, bh, restart_color, restart_level, scale_factor=0.15)
+            self.draw_cached_text("gameover_restart_label", "Restart",
+                                  bx + bw / 2, by + bh / 2,
+                                  arcade.color.WHITE, 30,
+                                  anchor_x="center", anchor_y="center")
