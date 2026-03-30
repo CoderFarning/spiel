@@ -10,8 +10,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Hohe, aber stabile Eingaberate ohne die Last extremer Werte.
-        self.set_update_rate(1/480)
+        # Noch direktere Eingabe ohne in unvernünftige Lastbereiche zu gehen.
+        self.set_update_rate(1/960)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -56,6 +56,7 @@ class SurvivalGame(arcade.Window):
         self.settings_unlocked = False
         self.hover_level = {}
         self.hover_velocity = {}
+        self.text_cache = {}
         self.auto_shot_owned = False
         self.auto_shot_cooldown = 0.0
         self.auto_shot_waves_left = 0
@@ -140,7 +141,7 @@ class SurvivalGame(arcade.Window):
 
         # Haus in der Mitte
         try:
-            self.house_sprite = arcade.Sprite(str(IMG_DIR / "Haus.png"), scale=2.0)
+            self.house_sprite = arcade.Sprite(str(IMG_DIR / "Haus.png"), scale=0.3)
         except Exception:
             self.house_sprite = arcade.Sprite(center_x=0, center_y=0)
         self.house_sprite.center_x = 0
@@ -263,11 +264,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=36):
+    def point_in_rect(self, x, y, rect, padding=44):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=40):
+    def point_on_sprite(self, x, y, sprite, padding=48):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -285,10 +286,10 @@ class SurvivalGame(arcade.Window):
         except Exception:
             pass
 
-        # Fallback: enger an der sichtbaren Schmiede als an der transparenten Textur.
-        half_w = self.isch_sprite.width * 0.38
-        half_h = self.isch_sprite.height * 0.22
-        center_x = self.isch_sprite.center_x
+        # Fallback: an die sichtbare Schmiede angepasst, rechts leicht erweitert.
+        half_w = self.isch_sprite.width * 0.40
+        half_h = self.isch_sprite.height * 0.24
+        center_x = self.isch_sprite.center_x + self.isch_sprite.width * 0.03
         center_y = self.isch_sprite.center_y - self.isch_sprite.height * 0.02
         return (center_x - half_w) <= x <= (center_x + half_w) and (center_y - half_h) <= y <= (center_y + half_h)
 
@@ -625,7 +626,7 @@ class SurvivalGame(arcade.Window):
         # Upgrade-Fenster Buttons
         self.ui_rects["upgrade_close"] = (40, 40, 160, 60)  # unten links
         self.ui_rects["upgrade_buy"] = (self.width/2 - 100, self.height/2 - 40, 200, 70)
-        self.ui_rects["upgrade_targeter"] = (self.width/2 - 140, self.height/2 - 150, 280, 70)
+        self.ui_rects["upgrade_targeter"] = (self.width/2 - 190, self.height/2 - 150, 380, 70)
         # Haus-Upgrades-Schalter deaktiviert
         self.ui_rects["house_upgrades"] = (0, 0, 0, 0)
 
@@ -676,6 +677,20 @@ class SurvivalGame(arcade.Window):
 
         # leave Button bleibt unverändert
 
+    def draw_cached_text(self, key, text, x, y, color, size, anchor_x="left", anchor_y="baseline"):
+        sig = (size, anchor_x, anchor_y)
+        cached = self.text_cache.get(key)
+        if cached is None or cached["sig"] != sig:
+            obj = arcade.Text(text, x, y, color, size, anchor_x=anchor_x, anchor_y=anchor_y)
+            self.text_cache[key] = {"sig": sig, "obj": obj}
+        else:
+            obj = cached["obj"]
+            obj.text = text
+            obj.x = x
+            obj.y = y
+            obj.color = color
+        obj.draw()
+
     def update_hover_levels(self, delta_time: float):
         active_keys = []
         if self.state == "menu":
@@ -703,8 +718,8 @@ class SurvivalGame(arcade.Window):
             active_keys = ["gameover_restart"]
 
         # Physikalisch geglättetes Hover (Feder-Dämpfer)
-        k = 3000.0     # direkt, aber stabil
-        d = 180.0      # schnell genug ohne Jittern
+        k = 4200.0     # noch direkter für Klick-/Hover-Reaktion
+        d = 240.0      # stabil genug ohne Flattern
         for key in active_keys:
             target = 1.0 if self.is_hover(key) else 0.0
             x = self.hover_level.get(key, 0.0)
@@ -1335,7 +1350,7 @@ class SurvivalGame(arcade.Window):
             zielsucher_label = "Zielsucher 300 Gems (2 Wellen)" if not self.auto_shot_owned else "Zielsucher aktiv"
             arcade.draw_text(zielsucher_label,
                              bx + bw/2, by + bh/2,
-                             zielsucher_color if not self.auto_shot_owned else arcade.color.GOLD, 22,
+                             zielsucher_color if not self.auto_shot_owned else arcade.color.GOLD, 20,
                              anchor_x="center", anchor_y="center")
             bx, by, bw, bh = self.ui_rects["upgrade_close"]
             close_level = self.ease(self.hover_level.get("upgrade_close", 0.0))
