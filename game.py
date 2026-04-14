@@ -632,9 +632,13 @@ class SurvivalGame(arcade.Window):
         # Settings deaktiviert, aber KeyError vermeiden
         self.ui_rects["settings_button"] = (0, 0, 0, 0)
         # Upgrade-Fenster Buttons
-        self.ui_rects["upgrade_close"] = (50, 160, 180, 68)
-        self.ui_rects["upgrade_buy"] = (self.width/2 - 120, self.height/2 + 105, 240, 78)
-        self.ui_rects["upgrade_targeter"] = (self.width/2 - 240, self.height/2 - 20, 480, 78)
+        upgrade_window_w = 900
+        upgrade_window_h = 620
+        upgrade_window_x = self.width / 2 - upgrade_window_w / 2
+        upgrade_window_y = self.height / 2 - upgrade_window_h / 2
+        self.ui_rects["upgrade_close"] = (upgrade_window_x + 40, upgrade_window_y + 36, 180, 68)
+        self.ui_rects["upgrade_buy"] = (self.width / 2 - 120, upgrade_window_y + 140, 240, 78)
+        self.ui_rects["upgrade_targeter"] = (self.width / 2 - 240, upgrade_window_y + 250, 480, 78)
         # Haus-Upgrades-Schalter deaktiviert
         self.ui_rects["house_upgrades"] = (0, 0, 0, 0)
 
