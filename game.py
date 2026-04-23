@@ -897,6 +897,13 @@ class SurvivalGame(arcade.Window):
             bullet.center_x += bullet.change_x * delta_time
             bullet.center_y += bullet.change_y * delta_time
             bullet.life_time -= delta_time
+                # Kugeln außerhalb der Arena entfernen
+            if (bullet.center_x < -MAP_WIDTH / 2 or
+                bullet.center_x > MAP_WIDTH / 2 or
+                bullet.center_y < -MAP_HEIGHT / 2 or
+                bullet.center_y > MAP_HEIGHT / 2):
+                bullet.kill()
+                continue
             if bullet.life_time <= 0:
                 bullet.kill()
                 continue
