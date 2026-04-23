@@ -309,7 +309,7 @@ class SurvivalGame(arcade.Window):
             pass
 
     def get_weapon_upgrade_cost(self):
-        costs = [150, 750, 7500, 10000]
+        costs = [150, 750, 2500, 50000]
         if 1 <= self.weapon_level <= len(costs):
             return costs[self.weapon_level - 1]
         return None
@@ -878,11 +878,9 @@ class SurvivalGame(arcade.Window):
                 self.fire_bullet_towards(target_enemy.center_x, target_enemy.center_y, apply_cooldown=False)
                 self.auto_shot_cooldown = 0.4
 
-        if self.mouse_left_down and self.weapon_hold_timer <= 0:
-            if self.fire_bullet(self.mouse_x, self.mouse_y):
-                self.weapon_hold_timer = 0.02
-            else:
-                self.weapon_hold_timer = 0.02
+            if self.mouse_left_down and self.weapon_hold_timer <= 0:
+                if self.fire_bullet(self.mouse_x, self.mouse_y):
+                    self.weapon_hold_timer = 0.02
 
         # Auto-Start nach Vorbereitung
         if not self.wave_active:
