@@ -78,10 +78,10 @@ class SurvivalGame(arcade.Window):
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
-        self.total_coins = 1000000000
+        self.total_coins = 50
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
-        self.gems = 100000000
+        self.gems = 50
         self.mouse_x = 0
         self.mouse_y = 0
         self._pending_release_dedupe = None
