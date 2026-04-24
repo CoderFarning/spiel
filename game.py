@@ -78,10 +78,10 @@ class SurvivalGame(arcade.Window):
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
-        self.total_coins = 0
+        self.total_coins = 1000000000
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
-        self.gems = 0
+        self.gems = 100000000
         self.mouse_x = 0
         self.mouse_y = 0
         self._pending_release_dedupe = None
@@ -309,7 +309,7 @@ class SurvivalGame(arcade.Window):
             pass
 
     def get_weapon_upgrade_cost(self):
-        costs = [150, 750, 2500, 50000]
+        costs = [150, 750, 2500]
         if 1 <= self.weapon_level <= len(costs):
             return costs[self.weapon_level - 1]
         return None
@@ -343,7 +343,7 @@ class SurvivalGame(arcade.Window):
             return "AK-47"
         if self.weapon_level == 4:
             return "Minigun"
-        return "Minigun"
+        return "Minigun"   
 
     def get_next_weapon_name(self):
         if self.weapon_level == 1:
@@ -352,7 +352,8 @@ class SurvivalGame(arcade.Window):
             return "AK-47"
         if self.weapon_level == 3:
             return "Minigun"
-        return "Max Level"
+        if self.weapon_level == 4:
+            return ""
 
     def _handle_click(self, x, y, button):
         self.ensure_ui_rects()
