@@ -3,7 +3,6 @@ from pathlib import Path
 import arcade
 import math
 import random
-import time
 
 # ---------------- SETTINGS ----------------
 SCREEN_TITLE = "Survival Map"
@@ -11,6 +10,8 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 MAP_WIDTH = 3600
 MAP_HEIGHT = 3600
+LOBBY_WIDTH = 5000
+LOBBY_HEIGHT = 5000
 ASSET_BASE = Path(__file__).resolve().parent
 IMG_DIR = ASSET_BASE
 SOUND_DIR = ASSET_BASE
@@ -26,8 +27,6 @@ ENEMY_SPEED = 95 + (100 / 60) + 50 + 100 + 300 + 120
 MINIMAP_SCALE = 0.05
 
 SHOT_RADIUS = 500
-MAX_SHOTS = 30.0
-PORTAL_RADIUS = 140
 PORTAL_COOLDOWN = 0.4
 AMMO_COST = 2
 SPAWN_PREVIEW_DURATION = 1.0
@@ -37,6 +36,13 @@ class Enemy(arcade.Sprite):
     def __init__(self, image: str):
         super().__init__(image, scale=0.5)
         self.base_speed = ENEMY_SPEED
+        self.hit_points = 1
+        self.max_hit_points = 1
+        self.enemy_type = 1
+        self.gem_reward = 10
+        self.touch_damage = 10
+        self.final_texture = None
+        self.final_scale = 0.5
         self.is_dying = False
         self.death_timer = 0.0
         self.is_spawning = False
@@ -106,11 +112,21 @@ class SurvivalGame(arcade.Window):
         self.player_damage_cooldown = 0.0
         self.player_name = ""
         self.name_confirmed = False
+        self.lobby_wait_time = 10.0
+        self.lobby_timer = self.lobby_wait_time
+        self.lobby_active_circle = -1
+        self.lobby_circles = []
+        self.lobby_paused = False
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = None  # wird nicht mehr benutzt
         self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
         self.enemy_texture = arcade.load_texture(str(IMG_DIR / "gegner.png"))
+        self.enemy2_texture = arcade.load_texture(str(IMG_DIR / "gegner2.png"))
+        self.enemy3_texture = arcade.load_texture(str(IMG_DIR / "gegner3.png"))
         self.spawn_hole_texture = arcade.load_texture(str(IMG_DIR / "loch.png"))
+        self.spawn_hole2_texture = arcade.load_texture(str(IMG_DIR / "loch2.png"))
+        self.spawn_hole3_texture = arcade.load_texture(str(IMG_DIR / "loch3.png"))
+        self.teleporter_texture = arcade.load_texture(str(IMG_DIR / "teleporter.png"))
         self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
         self.player_scale_armed = 0.4
@@ -174,7 +190,7 @@ class SurvivalGame(arcade.Window):
         self.weapon_equipped = False
         self.player = arcade.Sprite(str(IMG_DIR / "spielerB.png"), scale=self.player_scale_unarmed)
         self.player.center_x = 0
-        self.player.center_y = 0
+        self.player.center_y = -LOBBY_HEIGHT / 2 + 40
         self.player_list.append(self.player)
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
         self.isch_sprite = None
@@ -222,6 +238,10 @@ class SurvivalGame(arcade.Window):
         self.total_coins = 0
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
+        self.lobby_timer = self.lobby_wait_time
+        self.lobby_active_circle = -1
+        self.lobby_circles = []
+        self.lobby_paused = False
 
     # ---------------- INPUT ----------------
     def on_key_press(self, key, modifiers):
@@ -272,11 +292,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=44):
+    def point_in_rect(self, x, y, rect, padding=300):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=48):
+    def point_on_sprite(self, x, y, sprite, padding=300):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -320,7 +340,7 @@ class SurvivalGame(arcade.Window):
         if self.weapon_level == 2:
             return 0.3
         if self.weapon_level == 3:
-            return 0.01
+            return 0.75
         return 0.0
 
     def get_weapon_status_text(self):
@@ -329,7 +349,7 @@ class SurvivalGame(arcade.Window):
         if self.weapon_level == 2:
             return "3 Schüsse, 0.3s Cooldown"
         if self.weapon_level == 3:
-            return "1 Schuss, 0.01s Cooldown"
+            return "1 Schuss, 0.75s Cooldown"
         if self.weapon_level == 4:
             return "3 Schüsse, kein Cooldown"
         return "3 Schüsse, halten für Dauerfeuer"
@@ -363,18 +383,31 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             bx, by, bw, bh = self.ui_rects["start_button"]
             if self.point_in_rect(x, y, (bx, by, bw, bh)):
+                # Single-click start: if a name is present, confirm and start immediately.
+                if not self.name_confirmed and self.player_name.strip():
+                    self.name_confirmed = True
                 if not self.name_confirmed:
                     return True
                 self.setup_game()
-                self.state = "game"
-                self.start_prep()
+                self.state = "lobby"
+                self.lobby_timer = self.lobby_wait_time
+                self.lobby_active_circle = -1
                 return True
+
+        elif self.state == "lobby":
+            bx, by, bw, bh = self.ui_rects.get("lobby_leave", (0, 0, 0, 0))
+            if self.lobby_active_circle >= 0 and self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
+                self.lobby_paused = True
+                self.lobby_active_circle = -1
+                self.lobby_timer = self.lobby_wait_time
+                return True
+            return True
 
         elif self.state == "game":
             bx, by, bw, bh = self.ui_rects["upgrade_panel_window"]
             weapon_cost = self.get_weapon_upgrade_cost()
             if self.point_in_rect(x, y, (bx, by, bw, bh)):
-                if (not self.wave_active) and weapon_cost is not None and self.gems >= weapon_cost:
+                if weapon_cost is not None and self.gems >= weapon_cost:
                     self.gems -= weapon_cost
                     self.weapon_level += 1
                     self.weapon_upgraded = self.weapon_level > 1
@@ -423,8 +456,9 @@ class SurvivalGame(arcade.Window):
                 self.stop_shop_sound()
                 self.stop_prep()
                 self.setup_game()
-                self.state = "game"
-                self.start_prep()
+                self.state = "lobby"
+                self.lobby_timer = self.lobby_wait_time
+                self.lobby_active_circle = -1
                 return True
             return True
 
@@ -758,8 +792,8 @@ class SurvivalGame(arcade.Window):
             return
         if self.wave_started_once and self.wave_completed:
             self.wave_number += 1
-        self.current_spawn_interval = 1.0
-        self.current_enemy_speed = max(90, ENEMY_SPEED * 0.22 + (self.wave_number - 1) * 12)
+        self.current_spawn_interval = max(0.35, 0.95 - (self.wave_number - 1) * 0.02)
+        self.current_enemy_speed = max(120, ENEMY_SPEED * 0.30 + (self.wave_number - 1) * 18)
         self.wave_active = True
         self.wave_started_once = True
         self.wave_completed = False
@@ -769,7 +803,8 @@ class SurvivalGame(arcade.Window):
         self.wave_message_timer = 0.0
         self.spawn_cycles_done = 0
         self.spawn_cycles_per_wave = 0
-        self.wave_spawn_goal = 5 + (self.wave_number - 1) * 2
+        # Schwerere Skalierung: Welle 20 liegt ueber 100 Gegnern.
+        self.wave_spawn_goal = max(8, int(round(8 + (self.wave_number - 1) * 6.2)))
         self.wave_spawned_total = 0
         self.wave_kills = 0
         self.wave_lives_lost = 0
@@ -856,6 +891,73 @@ class SurvivalGame(arcade.Window):
 
         self.update_hover_levels(delta_time)
 
+        if self.state == "lobby":
+            # Bewegung auch in der Lobby erlauben.
+            self.player.change_x = 0
+            self.player.change_y = 0
+            speed = PLAYER_SPEED
+
+            move_x = 0
+            move_y = 0
+            if arcade.key.A in self.keys or arcade.key.LEFT in self.keys:
+                move_x -= 1
+            if arcade.key.D in self.keys or arcade.key.RIGHT in self.keys:
+                move_x += 1
+            if arcade.key.W in self.keys or arcade.key.UP in self.keys:
+                move_y += 1
+            if arcade.key.S in self.keys or arcade.key.DOWN in self.keys:
+                move_y -= 1
+
+            if move_x != 0 or move_y != 0:
+                length = math.hypot(move_x, move_y)
+                self.player.change_x = (move_x / length) * speed
+                self.player.change_y = (move_y / length) * speed
+
+            self.player.center_x += self.player.change_x * delta_time
+            self.player.center_y += self.player.change_y * delta_time
+            self.player.center_x = max(-LOBBY_WIDTH//2, min(LOBBY_WIDTH//2, self.player.center_x))
+            self.player.center_y = max(-LOBBY_HEIGHT//2, min(LOBBY_HEIGHT//2, self.player.center_y))
+            self.camera.position = (self.player.center_x, self.player.center_y)
+            # Lobby-Kreise dynamisch auf aktuelle Fenstergröße legen.
+            spacing = 320
+            radius = 110
+            base_x = 0
+            y = 0
+            self.lobby_circles = [
+                (base_x - spacing, y, radius),
+                (base_x, y, radius),
+                (base_x + spacing, y, radius),
+            ]
+
+            player_screen_x = self.player.center_x
+            player_screen_y = self.player.center_y
+            if self.lobby_paused:
+                self.lobby_active_circle = -1
+                self.lobby_timer = self.lobby_wait_time
+                return
+
+            active = -1
+            for idx, (cx, cy, r) in enumerate(self.lobby_circles):
+                if math.hypot(player_screen_x - cx, player_screen_y - cy) <= r:
+                    active = idx
+                    break
+
+            if active >= 0:
+                if self.lobby_active_circle == -1:
+                    self.lobby_active_circle = active
+                    self.lobby_timer = self.lobby_wait_time
+                else:
+                    self.lobby_timer -= delta_time
+                    if self.lobby_timer <= 0:
+                        self.state = "game"
+                        self.start_prep()
+                        self.lobby_timer = self.lobby_wait_time
+                        self.lobby_active_circle = -1
+            else:
+                self.lobby_active_circle = -1
+                self.lobby_timer = self.lobby_wait_time
+            return
+
         if self.state != "game":
             return
 
@@ -879,9 +981,10 @@ class SurvivalGame(arcade.Window):
                 self.fire_bullet_towards(target_enemy.center_x, target_enemy.center_y, apply_cooldown=False)
                 self.auto_shot_cooldown = 0.4
 
-            if self.mouse_left_down and self.weapon_hold_timer <= 0:
-                if self.fire_bullet(self.mouse_x, self.mouse_y):
-                    self.weapon_hold_timer = 0.02
+        # Gedrueckt halten = kontinuierlich schiessen (Cooldown der Waffe bleibt aktiv).
+        if self.mouse_left_down and self.weapon_hold_timer <= 0:
+            if self.fire_bullet(self.mouse_x, self.mouse_y):
+                self.weapon_hold_timer = 0.02
 
         # Auto-Start nach Vorbereitung
         if not self.wave_active:
@@ -910,10 +1013,14 @@ class SurvivalGame(arcade.Window):
             for enemy in hits:
                 if enemy.is_dying or enemy.is_spawning:
                     continue
+                enemy.hit_points -= 1
+                if enemy.hit_points > 0:
+                    bullet.kill()
+                    break
                 enemy.kill()
                 bullet.kill()
                 self.wave_kills += 1
-                self.gems += 10
+                self.gems += enemy.gem_reward
                 break
 
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
@@ -923,13 +1030,13 @@ class SurvivalGame(arcade.Window):
 
         move_x = 0
         move_y = 0
-        if arcade.key.A in self.keys:
+        if arcade.key.A in self.keys or arcade.key.LEFT in self.keys:
             move_x -= 1
-        if arcade.key.D in self.keys:
+        if arcade.key.D in self.keys or arcade.key.RIGHT in self.keys:
             move_x += 1
-        if arcade.key.W in self.keys:
+        if arcade.key.W in self.keys or arcade.key.UP in self.keys:
             move_y += 1
-        if arcade.key.S in self.keys:
+        if arcade.key.S in self.keys or arcade.key.DOWN in self.keys:
             move_y -= 1
 
         if move_x != 0 or move_y != 0:
@@ -1006,8 +1113,8 @@ class SurvivalGame(arcade.Window):
                 enemy.spawn_timer -= delta_time
                 if enemy.spawn_timer <= 0:
                     enemy.is_spawning = False
-                    enemy.texture = self.enemy_texture
-                    enemy.scale = 0.5
+                    enemy.texture = enemy.final_texture
+                    enemy.scale = enemy.final_scale
                 continue
             if enemy.is_dying:
                 enemy.death_timer -= delta_time
@@ -1029,7 +1136,7 @@ class SurvivalGame(arcade.Window):
             enemy.center_y = max(-MAP_HEIGHT//2, min(MAP_HEIGHT//2, enemy.center_y))
 
             if arcade.check_for_collision(enemy, self.player) and self.player_damage_cooldown <= 0:
-                self.player_health = max(0, self.player_health - 10)
+                self.player_health = max(0, self.player_health - enemy.touch_damage)
                 self.wave_lives_lost += 1
                 self.player_damage_cooldown = 0.35
 
@@ -1040,12 +1147,48 @@ class SurvivalGame(arcade.Window):
 
     # ---------------- SPAWN ----------------
     def spawn_enemies(self):
-        image = str(IMG_DIR / "gegner.png")
         amount = 1
         for _ in range(amount):
-            enemy = Enemy(str(IMG_DIR / "loch.png"))
+            # Ab Welle 10: auch Typ 3, ab Welle 5: auch Typ 2, davor nur Typ 1.
+            if self.wave_number >= 10:
+                enemy_type = random.choice((1, 2, 3))
+            elif self.wave_number >= 5:
+                enemy_type = random.choice((1, 2))
+            else:
+                enemy_type = 1
+
+            if enemy_type == 3:
+                spawn_texture = str(IMG_DIR / "loch3.png")
+                final_texture = self.enemy3_texture
+                hit_points = 25
+                base_speed = self.current_enemy_speed * 1.5
+                gem_reward = 25
+                touch_damage = 24
+            elif enemy_type == 2:
+                spawn_texture = str(IMG_DIR / "loch2.png")
+                final_texture = self.enemy2_texture
+                hit_points = 10
+                base_speed = self.current_enemy_speed
+                gem_reward = 10
+                touch_damage = 16
+            else:
+                spawn_texture = str(IMG_DIR / "loch.png")
+                final_texture = self.enemy_texture
+                hit_points = 5
+                base_speed = self.current_enemy_speed
+                gem_reward = 10
+                touch_damage = 10
+
+            enemy = Enemy(spawn_texture)
             enemy.scale = 0.28
-            enemy.base_speed = self.current_enemy_speed
+            enemy.base_speed = base_speed
+            enemy.hit_points = hit_points
+            enemy.max_hit_points = hit_points
+            enemy.enemy_type = enemy_type
+            enemy.gem_reward = gem_reward
+            enemy.touch_damage = touch_damage
+            enemy.final_texture = final_texture
+            enemy.final_scale = 0.5
             enemy.is_spawning = True
             enemy.spawn_timer = SPAWN_PREVIEW_DURATION
             for _attempt in range(24):
@@ -1104,6 +1247,62 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.WHITE, 26,
                                  anchor_y="center")
 
+        elif self.state == "lobby":
+            arcade.draw_text("LOBBY",
+                             self.width / 2, self.height - 120,
+                             arcade.color.WHITE, 56,
+                             anchor_x="center")
+            arcade.draw_text("Gehe in einen Kreis und warte 10 Sekunden",
+                             self.width / 2, self.height - 180,
+                             arcade.color.LIGHT_GRAY, 24,
+                             anchor_x="center")
+
+            with self.camera.activate():
+                arcade.draw_lbwh_rectangle_outline(-LOBBY_WIDTH/2, -LOBBY_HEIGHT/2, LOBBY_WIDTH, LOBBY_HEIGHT,
+                                                   arcade.color.WHITE, border_width=4)
+                for idx, (cx, cy, r) in enumerate(self.lobby_circles):
+                    tex_size = r * 2
+                    arcade.draw_texture_rect(
+                        self.teleporter_texture,
+                        arcade.LBWH(cx - r, cy - r, tex_size, tex_size),
+                    )
+                    if idx == self.lobby_active_circle:
+                        arcade.draw_circle_outline(cx, cy, r + 6, arcade.color.SPRING_GREEN, 5)
+                self.player_list.draw()
+
+            if self.lobby_active_circle >= 0:
+                secs = max(0, math.ceil(self.lobby_timer))
+                arcade.draw_text(f"Teleporting {secs}s",
+                                 self.width / 2, self.height / 2 - 170,
+                                 arcade.color.GOLD, 30,
+                                 anchor_x="center")
+                arcade.draw_text("1/3",
+                                 self.width / 2, self.height / 2 - 208,
+                                 arcade.color.WHITE, 24,
+                                 anchor_x="center")
+                arcade.draw_text("Im Teleporter: bleib im Feld",
+                                 self.width / 2, self.height / 2 - 240,
+                                 arcade.color.SPRING_GREEN, 20,
+                                 anchor_x="center")
+                progress = 1.0 - max(0.0, min(1.0, self.lobby_timer / self.lobby_wait_time))
+                p_w, p_h = 320, 18
+                p_x = self.width / 2 - p_w / 2
+                p_y = self.height / 2 - 274
+                arcade.draw_lbwh_rectangle_filled(p_x, p_y, p_w, p_h, arcade.color.DARK_BLUE_GRAY)
+                arcade.draw_lbwh_rectangle_filled(p_x, p_y, p_w * progress, p_h, arcade.color.SPRING_GREEN)
+                arcade.draw_lbwh_rectangle_outline(p_x, p_y, p_w, p_h, arcade.color.WHITE, 2)
+                leave_rect = (20, self.height - 86, 170, 56)
+                self.ui_rects["lobby_leave"] = leave_rect
+                lbx, lby, lbw, lbh = leave_rect
+                arcade.draw_lbwh_rectangle_filled(lbx, lby, lbw, lbh, arcade.color.DARK_RED)
+                arcade.draw_lbwh_rectangle_outline(lbx, lby, lbw, lbh, arcade.color.WHITE, 2)
+                arcade.draw_text("Verlassen",
+                                 lbx + lbw / 2, lby + lbh / 2,
+                                 arcade.color.WHITE, 22,
+                                 anchor_x="center", anchor_y="center")
+            else:
+                self.ui_rects["lobby_leave"] = (0, 0, 0, 0)
+
         elif self.state == "game":
 
             with self.camera.activate():
@@ -1115,6 +1314,18 @@ class SurvivalGame(arcade.Window):
                 for bullet in self.bullet_list:
                     arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 5.5, arcade.color.ORANGE_PEEL)
                 self.player_list.draw()
+                # Kleine HP-Leiste ueber jedem aktiven Gegner.
+                for enemy in self.enemies:
+                    if enemy.is_dying or enemy.is_spawning:
+                        continue
+                    hp_ratio = max(0.0, min(1.0, enemy.hit_points / enemy.max_hit_points))
+                    bar_w = 146
+                    bar_h = 9
+                    bar_x = enemy.center_x - bar_w / 2
+                    bar_y = enemy.center_y + enemy.height / 2 + 8
+                    arcade.draw_lbwh_rectangle_filled(bar_x, bar_y, bar_w, bar_h, arcade.color.DARK_RED)
+                    arcade.draw_lbwh_rectangle_filled(bar_x, bar_y, bar_w * hp_ratio, bar_h, arcade.color.SPRING_GREEN)
+                    arcade.draw_lbwh_rectangle_outline(bar_x, bar_y, bar_w, bar_h, arcade.color.WHITE, 1)
                 arcade.draw_text(self.player_name,
                                  self.player.center_x,
                                  self.player.center_y + self.player.height/2 + 20,
