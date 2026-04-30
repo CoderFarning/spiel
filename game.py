@@ -292,11 +292,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=340):
+    def point_in_rect(self, x, y, rect, padding=380):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=340):
+    def point_on_sprite(self, x, y, sprite, padding=380):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -919,10 +919,10 @@ class SurvivalGame(arcade.Window):
             self.player.center_y = max(-LOBBY_HEIGHT//2, min(LOBBY_HEIGHT//2, self.player.center_y))
             self.camera.position = (self.player.center_x, self.player.center_y)
             # Lobby-Kreise dynamisch auf aktuelle Fenstergröße legen.
-            spacing = 320
-            radius = 110
+            spacing = 520
+            radius = 190
             base_x = 0
-            y = 0
+            y = LOBBY_HEIGHT / 2 - 460
             self.lobby_circles = [
                 (base_x - spacing, y, radius),
                 (base_x, y, radius),
@@ -1248,15 +1248,6 @@ class SurvivalGame(arcade.Window):
                                  anchor_y="center")
 
         elif self.state == "lobby":
-            arcade.draw_text("LOBBY",
-                             self.width / 2, self.height - 120,
-                             arcade.color.WHITE, 56,
-                             anchor_x="center")
-            arcade.draw_text("Gehe in einen Kreis und warte 10 Sekunden",
-                             self.width / 2, self.height - 180,
-                             arcade.color.LIGHT_GRAY, 24,
-                             anchor_x="center")
-
             with self.camera.activate():
                 arcade.draw_lbwh_rectangle_outline(-LOBBY_WIDTH/2, -LOBBY_HEIGHT/2, LOBBY_WIDTH, LOBBY_HEIGHT,
                                                    arcade.color.WHITE, border_width=4)
@@ -1271,23 +1262,10 @@ class SurvivalGame(arcade.Window):
                 self.player_list.draw()
 
             if self.lobby_active_circle >= 0:
-                secs = max(0, math.ceil(self.lobby_timer))
-                arcade.draw_text(f"Teleporting {secs}s",
-                                 self.width / 2, self.height / 2 - 170,
-                                 arcade.color.GOLD, 30,
-                                 anchor_x="center")
-                arcade.draw_text("1/3",
-                                 self.width / 2, self.height / 2 - 208,
-                                 arcade.color.WHITE, 24,
-                                 anchor_x="center")
-                arcade.draw_text("Im Teleporter: bleib im Feld",
-                                 self.width / 2, self.height / 2 - 240,
-                                 arcade.color.SPRING_GREEN, 20,
-                                 anchor_x="center")
                 progress = 1.0 - max(0.0, min(1.0, self.lobby_timer / self.lobby_wait_time))
                 p_w, p_h = 320, 18
                 p_x = self.width / 2 - p_w / 2
-                p_y = self.height / 2 - 274
+                p_y = self.height - 64
                 arcade.draw_lbwh_rectangle_filled(p_x, p_y, p_w, p_h, arcade.color.DARK_BLUE_GRAY)
                 arcade.draw_lbwh_rectangle_filled(p_x, p_y, p_w * progress, p_h, arcade.color.SPRING_GREEN)
                 arcade.draw_lbwh_rectangle_outline(p_x, p_y, p_w, p_h, arcade.color.WHITE, 2)
