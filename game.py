@@ -292,11 +292,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=300):
+    def point_in_rect(self, x, y, rect, padding=340):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=300):
+    def point_on_sprite(self, x, y, sprite, padding=340):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
