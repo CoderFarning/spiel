@@ -10,8 +10,8 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 MAP_WIDTH = 3600
 MAP_HEIGHT = 3600
-LOBBY_WIDTH = 5000
-LOBBY_HEIGHT = 5000
+LOBBY_WIDTH = 4400
+LOBBY_HEIGHT = 4400
 ASSET_BASE = Path(__file__).resolve().parent
 IMG_DIR = ASSET_BASE
 SOUND_DIR = ASSET_BASE
@@ -88,6 +88,8 @@ class SurvivalGame(arcade.Window):
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
         self.gems = 50
+        self.bandages = 0
+        self.total_enemy_kills = 0
         self.mouse_x = 0
         self.mouse_y = 0
         self._pending_release_dedupe = None
@@ -116,7 +118,6 @@ class SurvivalGame(arcade.Window):
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
         self.lobby_circles = []
-        self.lobby_paused = False
         self.bullet_list = arcade.SpriteList()
         self.bullet_texture = None  # wird nicht mehr benutzt
         self.pistol_texture = arcade.load_texture(str(IMG_DIR / "pistole.png"))
@@ -236,12 +237,13 @@ class SurvivalGame(arcade.Window):
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
         self.total_coins = 0
+        self.bandages = 0
+        self.total_enemy_kills = 0
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
         self.lobby_circles = []
-        self.lobby_paused = False
 
     # ---------------- INPUT ----------------
     def on_key_press(self, key, modifiers):
@@ -397,9 +399,10 @@ class SurvivalGame(arcade.Window):
         elif self.state == "lobby":
             bx, by, bw, bh = self.ui_rects.get("lobby_leave", (0, 0, 0, 0))
             if self.lobby_active_circle >= 0 and self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
-                self.lobby_paused = True
                 self.lobby_active_circle = -1
                 self.lobby_timer = self.lobby_wait_time
+                self.player.center_x = 0
+                self.player.center_y = -LOBBY_HEIGHT / 2 + 40
                 return True
             return True
 
@@ -787,6 +790,17 @@ class SurvivalGame(arcade.Window):
         wy = dy + cy
         return wx, wy
 
+    def get_ai_targets(self):
+        # Für späteres Multiplayer: hier können mehrere Spieler zurückgegeben werden.
+        return [self.player]
+
+    def heal_dead_players_with_bandage(self):
+        # Multiplayer-ready placeholder: can be extended once multiple player
+        # entities and death states are available.
+        if self.bandages <= 0:
+            return False
+        return False
+
     def start_wave(self):
         if self.wave_active:
             return
@@ -931,9 +945,18 @@ class SurvivalGame(arcade.Window):
 
             player_screen_x = self.player.center_x
             player_screen_y = self.player.center_y
-            if self.lobby_paused:
-                self.lobby_active_circle = -1
-                self.lobby_timer = self.lobby_wait_time
+            # Solange ein Teleporter aktiv ist, bleibt der Spieler darin gefangen
+            # bis Teleport oder bis er aktiv "Verlassen" klickt.
+            if self.lobby_active_circle >= 0:
+                cx, cy, _r = self.lobby_circles[self.lobby_active_circle]
+                self.player.center_x = cx
+                self.player.center_y = cy
+                self.lobby_timer -= delta_time
+                if self.lobby_timer <= 0:
+                    self.state = "game"
+                    self.start_prep()
+                    self.lobby_timer = self.lobby_wait_time
+                    self.lobby_active_circle = -1
                 return
 
             active = -1
@@ -943,16 +966,11 @@ class SurvivalGame(arcade.Window):
                     break
 
             if active >= 0:
-                if self.lobby_active_circle == -1:
-                    self.lobby_active_circle = active
-                    self.lobby_timer = self.lobby_wait_time
-                else:
-                    self.lobby_timer -= delta_time
-                    if self.lobby_timer <= 0:
-                        self.state = "game"
-                        self.start_prep()
-                        self.lobby_timer = self.lobby_wait_time
-                        self.lobby_active_circle = -1
+                self.lobby_active_circle = active
+                self.lobby_timer = self.lobby_wait_time
+                cx, cy, _r = self.lobby_circles[self.lobby_active_circle]
+                self.player.center_x = cx
+                self.player.center_y = cy
             else:
                 self.lobby_active_circle = -1
                 self.lobby_timer = self.lobby_wait_time
@@ -1020,6 +1038,9 @@ class SurvivalGame(arcade.Window):
                 enemy.kill()
                 bullet.kill()
                 self.wave_kills += 1
+                self.total_enemy_kills += 1
+                if self.total_enemy_kills % 20 == 0:
+                    self.bandages += 1
                 self.gems += enemy.gem_reward
                 break
 
@@ -1122,10 +1143,21 @@ class SurvivalGame(arcade.Window):
                     enemy.kill()
                 continue
 
-            target_x = self.player.center_x
-            target_y = self.player.center_y
-            dx = target_x - enemy.center_x
-            dy = target_y - enemy.center_y
+            targets = self.get_ai_targets()
+            nearest = None
+            nearest_dist = None
+            for target in targets:
+                tdx = target.center_x - enemy.center_x
+                tdy = target.center_y - enemy.center_y
+                d = math.hypot(tdx, tdy)
+                if nearest is None or d < nearest_dist:
+                    nearest = target
+                    nearest_dist = d
+            if nearest is None:
+                continue
+
+            dx = nearest.center_x - enemy.center_x
+            dy = nearest.center_y - enemy.center_y
             dist = math.hypot(dx, dy)
 
             if dist > 0:
@@ -1257,6 +1289,11 @@ class SurvivalGame(arcade.Window):
                         self.teleporter_texture,
                         arcade.LBWH(cx - r, cy - r, tex_size, tex_size),
                     )
+                    players_in_this = 1 if idx == self.lobby_active_circle else 0
+                    arcade.draw_text(f"{players_in_this}/3",
+                                     cx, cy + r + 26,
+                                     arcade.color.WHITE, 22,
+                                     anchor_x="center")
                     if idx == self.lobby_active_circle:
                         arcade.draw_circle_outline(cx, cy, r + 6, arcade.color.SPRING_GREEN, 5)
                 self.player_list.draw()
@@ -1370,6 +1407,9 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(f"💎 Gems: {int(self.gems)}",
                              20, 165,
                              arcade.color.GOLD, 20)
+            arcade.draw_text(f"🩹 Bandagen: {int(self.bandages)}",
+                             20, 192,
+                             arcade.color.WHITE, 20)
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
