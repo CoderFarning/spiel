@@ -52,8 +52,8 @@ class SurvivalGame(arcade.Window):
 
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
-        # Noch direktere Eingabe ohne in unvernünftige Lastbereiche zu gehen.
-        self.set_update_rate(1/960)
+        # Fluesig, aber stabil (zu hohe Update-Rates erzeugen eher Ruckler/CPU-Last).
+        self.set_update_rate(1/240)
         arcade.set_background_color(arcade.color.DARK_GREEN)
 
         self.state = "menu"
@@ -294,11 +294,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=380):
+    def point_in_rect(self, x, y, rect, padding=420):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=380):
+    def point_on_sprite(self, x, y, sprite, padding=420):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -806,8 +806,9 @@ class SurvivalGame(arcade.Window):
             return
         if self.wave_started_once and self.wave_completed:
             self.wave_number += 1
-        self.current_spawn_interval = max(0.35, 0.95 - (self.wave_number - 1) * 0.02)
-        self.current_enemy_speed = max(120, ENEMY_SPEED * 0.30 + (self.wave_number - 1) * 18)
+        # Schwerer: schnellerer Spawn und schnelleres Scaling pro Welle.
+        self.current_spawn_interval = max(0.25, 0.80 - (self.wave_number - 1) * 0.025)
+        self.current_enemy_speed = max(140, ENEMY_SPEED * 0.35 + (self.wave_number - 1) * 24)
         self.wave_active = True
         self.wave_started_once = True
         self.wave_completed = False
@@ -817,8 +818,8 @@ class SurvivalGame(arcade.Window):
         self.wave_message_timer = 0.0
         self.spawn_cycles_done = 0
         self.spawn_cycles_per_wave = 0
-        # Schwerere Skalierung: Welle 20 liegt ueber 100 Gegnern.
-        self.wave_spawn_goal = max(8, int(round(8 + (self.wave_number - 1) * 6.2)))
+        # Schwerer: deutlich mehr Zombies pro Welle (Welle 20 ~ 143).
+        self.wave_spawn_goal = max(10, int(round(10 + (self.wave_number - 1) * 7.0)))
         self.wave_spawned_total = 0
         self.wave_kills = 0
         self.wave_lives_lost = 0
@@ -1295,7 +1296,22 @@ class SurvivalGame(arcade.Window):
                                      arcade.color.WHITE, 22,
                                      anchor_x="center")
                     if idx == self.lobby_active_circle:
-                        arcade.draw_circle_outline(cx, cy, r + 6, arcade.color.SPRING_GREEN, 5)
+                        # Graue Basis-Ringlinie + gruener Countdown-Ring, der mit der Zeit ablaeuft.
+                        ring_radius = r + 6
+                        arcade.draw_circle_outline(cx, cy, ring_radius, arcade.color.DARK_GRAY, 5)
+                        remaining = max(0.0, min(1.0, self.lobby_timer / self.lobby_wait_time))
+                        sweep = 360.0 * remaining
+                        if sweep > 0:
+                            segments = max(12, int(80 * remaining))
+                            start_angle = 90.0
+                            for seg_idx in range(segments):
+                                a1 = math.radians(start_angle - (sweep * seg_idx / segments))
+                                a2 = math.radians(start_angle - (sweep * (seg_idx + 1) / segments))
+                                x1 = cx + math.cos(a1) * ring_radius
+                                y1 = cy + math.sin(a1) * ring_radius
+                                x2 = cx + math.cos(a2) * ring_radius
+                                y2 = cy + math.sin(a2) * ring_radius
+                                arcade.draw_line(x1, y1, x2, y2, arcade.color.SPRING_GREEN, 5)
                 self.player_list.draw()
 
             if self.lobby_active_circle >= 0:
