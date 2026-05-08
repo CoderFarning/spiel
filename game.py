@@ -195,10 +195,10 @@ class SurvivalGame(arcade.Window):
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
-        self.total_coins = 50
+        self.total_coins = 100000
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
-        self.gems = 50
+        self.gems = 100000
         self.bandages = 0
         self.total_enemy_kills = 0
         self.mouse_x = 0
@@ -463,8 +463,8 @@ class SurvivalGame(arcade.Window):
         if self.weapon_level == 2:
             return 0.3
         if self.weapon_level == 3:
-            return 0.1
-        return 0.0
+            return 0.05
+        return 0.05
 
     def get_weapon_status_text(self):
         if self.weapon_level == 1:
