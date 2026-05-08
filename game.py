@@ -1,8 +1,12 @@
 from pathlib import Path
 
 import arcade
+import json
 import math
 import random
+import socket
+import threading
+import time
 
 # ---------------- SETTINGS ----------------
 SCREEN_TITLE = "Survival Map"
@@ -32,6 +36,104 @@ AMMO_COST = 2
 SPAWN_PREVIEW_DURATION = 1.0
 
 
+class OnlineClient:
+    def __init__(self, host: str, port: int, name: str):
+        self.host = host
+        self.port = port
+        self.name = name
+        self.player_id = None
+        self.connected = False
+        self._sock = None
+        self._lock = threading.Lock()
+        self._snapshot = {}
+        self._running = False
+        self._recv_thread = None
+
+    def connect(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.connect((self.host, self.port))
+        self._sock.settimeout(0.5)
+        self.connected = True
+        self._running = True
+        self._send({"type": "hello", "name": self.name})
+        self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
+        self._recv_thread.start()
+
+    def close(self):
+        self._running = False
+        self.connected = False
+        try:
+            if self._sock:
+                self._sock.close()
+        except Exception:
+            pass
+        self._sock = None
+
+    def _send(self, payload):
+        if not self._sock:
+            return
+        data = (json.dumps(payload) + "\n").encode("utf-8")
+        try:
+            self._sock.sendall(data)
+        except Exception:
+            self.connected = False
+
+    def send_state(self, x: float, y: float, health: float, wave: int, state: str, in_portal: bool, portal_index: int, dead: bool):
+        if not self.connected:
+            return
+        self._send({
+            "type": "state",
+            "x": x,
+            "y": y,
+            "health": health,
+            "wave": wave,
+            "state": state,
+            "in_portal": in_portal,
+            "portal_index": portal_index,
+            "dead": dead,
+        })
+
+    def send_shot(self, x: float, y: float, vx: float, vy: float, ttl: float = 1.2):
+        if not self.connected:
+            return
+        self._send({"type": "shot", "x": x, "y": y, "vx": vx, "vy": vy, "ttl": ttl})
+
+    def send_revive(self, target_id: int):
+        if not self.connected:
+            return
+        self._send({"type": "revive", "target_id": target_id})
+
+    def _recv_loop(self):
+        buffer = ""
+        while self._running and self._sock:
+            try:
+                chunk = self._sock.recv(8192)
+                if not chunk:
+                    self.connected = False
+                    break
+                buffer += chunk.decode("utf-8")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    msg = json.loads(line)
+                    if msg.get("type") == "welcome":
+                        self.player_id = msg.get("id")
+                    elif msg.get("type") == "snapshot":
+                        with self._lock:
+                            self._snapshot = msg
+            except socket.timeout:
+                continue
+            except Exception:
+                self.connected = False
+                break
+
+    def get_snapshot(self):
+        with self._lock:
+            return dict(self._snapshot)
+
+
 class Enemy(arcade.Sprite):
     def __init__(self, image: str):
         super().__init__(image, scale=0.5)
@@ -50,8 +152,8 @@ class Enemy(arcade.Sprite):
 
 class SurvivalGame(arcade.Window):
 
-    def __init__(self):
-        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True, resizable=False)
+    def __init__(self, online_client: OnlineClient | None = None):
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
         # Fluesig, aber stabil (zu hohe Update-Rates erzeugen eher Ruckler/CPU-Last).
         self.set_update_rate(1/240)
         arcade.set_background_color(arcade.color.DARK_GREEN)
@@ -64,6 +166,13 @@ class SurvivalGame(arcade.Window):
         except Exception:
             pass
         self.keys = set()
+        self.online_client = online_client
+        self.remote_players = []
+        self.remote_bullets = []
+        self.remote_bullet_seen = set()
+        self.remote_portals = {}
+        self.is_downed = False
+        self.respawn_timer = 0.0
 
         self.wave_active = False
         self.wave_timer = 0
@@ -80,6 +189,8 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
+        self.bandage_message = ""
+        self.bandage_message_timer = 0.0
         self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
@@ -130,6 +241,7 @@ class SurvivalGame(arcade.Window):
         self.teleporter_texture = arcade.load_texture(str(IMG_DIR / "teleporter.png"))
         self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
+        self.remote_player_texture = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_scale_armed = 0.4
         self.player_scale_unarmed = 0.4
         self.pistol_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.6)
@@ -177,6 +289,13 @@ class SurvivalGame(arcade.Window):
         self.update_ui_rects()
 
         self.setup_game()
+        # Name kann vom Client vorbefüllt werden, Auswahl bleibt aber im Startmenü.
+        if self.online_client and self.online_client.name:
+            self.player_name = self.online_client.name
+        if self.player_name.strip().lower() == "spieler":
+            self.player_name = ""
+        self.name_confirmed = False
+        self.state = "menu"
 
     # ---------------- SETUP ----------------
     def setup_game(self):
@@ -232,6 +351,8 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
+        self.bandage_message = ""
+        self.bandage_message_timer = 0.0
         self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
@@ -294,11 +415,11 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
         self.ensure_ui_rects()
 
-    def point_in_rect(self, x, y, rect, padding=420):
+    def point_in_rect(self, x, y, rect, padding=500):
         bx, by, bw, bh = rect
         return (bx - padding) <= x <= (bx + bw + padding) and (by - padding) <= y <= (by + bh + padding)
 
-    def point_on_sprite(self, x, y, sprite, padding=420):
+    def point_on_sprite(self, x, y, sprite, padding=500):
         if sprite is None:
             return False
         left = sprite.center_x - sprite.width / 2 - padding
@@ -407,6 +528,16 @@ class SurvivalGame(arcade.Window):
             return True
 
         elif self.state == "game":
+            if self.is_downed:
+                if self.respawn_timer <= 0:
+                    bx, by, bw, bh = self.ui_rects.get("downed_respawn", (0, 0, 0, 0))
+                    if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
+                        self.is_downed = False
+                        self.player_health = self.player_health_max
+                        self.respawn_timer = 0.0
+                        return True
+                return True
+
             bx, by, bw, bh = self.ui_rects["upgrade_panel_window"]
             weapon_cost = self.get_weapon_upgrade_cost()
             if self.point_in_rect(x, y, (bx, by, bw, bh)):
@@ -417,6 +548,15 @@ class SurvivalGame(arcade.Window):
                 return True
 
             if button == arcade.MOUSE_BUTTON_LEFT:
+                if self.online_client and self.bandages > 0:
+                    wx, wy = self.screen_to_world(x, y)
+                    for ghost in self.remote_players:
+                        if not getattr(ghost, "dead", False):
+                            continue
+                        if math.hypot(ghost.center_x - wx, ghost.center_y - wy) <= 90:
+                            self.bandages -= 1
+                            self.online_client.send_revive(int(getattr(ghost, "id", -1)))
+                            return True
                 self.fire_bullet(x, y)
                 return True
 
@@ -791,8 +931,12 @@ class SurvivalGame(arcade.Window):
         return wx, wy
 
     def get_ai_targets(self):
-        # Für späteres Multiplayer: hier können mehrere Spieler zurückgegeben werden.
-        return [self.player]
+        targets = [self.player]
+        for remote in self.remote_players:
+            if getattr(remote, "dead", False):
+                continue
+            targets.append(remote)
+        return targets
 
     def heal_dead_players_with_bandage(self):
         # Multiplayer-ready placeholder: can be extended once multiple player
@@ -857,6 +1001,8 @@ class SurvivalGame(arcade.Window):
             bullet.change_y = local_dir_y * bullet_speed
             bullet.life_time = 1e9  # quasi unendlich
             self.bullet_list.append(bullet)
+            if self.online_client and self.online_client.connected:
+                self.online_client.send_shot(start_x, start_y, bullet.change_x, bullet.change_y, 1.2)
 
         if self.weapon_level in (1, 3):
             spawn_single_bullet(dir_x, dir_y)
@@ -893,6 +1039,11 @@ class SurvivalGame(arcade.Window):
             self.admin_message_timer -= delta_time
             if self.admin_message_timer <= 0:
                 self.admin_message = ""
+        if self.bandage_message_timer > 0:
+            self.bandage_message_timer -= delta_time
+            if self.bandage_message_timer <= 0:
+                self.bandage_message_timer = 0.0
+                self.bandage_message = ""
 
         # Caret blink
         if self.admin_focus:
@@ -905,6 +1056,73 @@ class SurvivalGame(arcade.Window):
             self.caret_timer = 0.0
 
         self.update_hover_levels(delta_time)
+
+        # Online-Snapshot in allen relevanten States aktualisieren (Lobby + Game).
+        if self.online_client and self.online_client.connected:
+            current_health = self.player_health if self.state == "game" else self.player_health_max
+            self.online_client.send_state(
+                self.player.center_x,
+                self.player.center_y,
+                current_health,
+                self.wave_number,
+                self.state,
+                self.state == "lobby" and self.lobby_active_circle >= 0,
+                self.lobby_active_circle,
+                self.is_downed,
+            )
+            snapshot = self.online_client.get_snapshot()
+            players = snapshot.get("players", [])
+            new_remote = []
+            self_data = None
+            for player_data in players:
+                if player_data.get("id") == self.online_client.player_id:
+                    self_data = player_data
+                    continue
+                ghost = type("Ghost", (), {})()
+                ghost.id = int(player_data.get("id", -1))
+                ghost.center_x = float(player_data.get("x", 0.0))
+                ghost.center_y = float(player_data.get("y", 0.0))
+                ghost_name = str(player_data.get("name", "User"))
+                if ghost_name.strip().lower() == "spieler":
+                    ghost_name = "User"
+                ghost.name = ghost_name
+                ghost.dead = bool(player_data.get("dead", False))
+                new_remote.append(ghost)
+            self.remote_players = new_remote
+            self.remote_portals = snapshot.get("portals", {})
+
+            if self_data and self.is_downed and not bool(self_data.get("dead", True)):
+                self.is_downed = False
+                self.player_health = self.player_health_max
+                self.respawn_timer = 0.0
+
+            now = time.time()
+            updated_remote_bullets = []
+            for event in snapshot.get("bullets", []):
+                event_id = int(event.get("id", -1))
+                owner_id = int(event.get("owner_id", -1))
+                if event_id in self.remote_bullet_seen or owner_id == self.online_client.player_id:
+                    continue
+                t0 = float(event.get("t0", now))
+                ttl = float(event.get("ttl", 0.0))
+                age = max(0.0, now - t0)
+                if age > ttl:
+                    self.remote_bullet_seen.add(event_id)
+                    continue
+                bullet = type("RemoteBullet", (), {})()
+                bullet.id = event_id
+                bullet.center_x = float(event.get("x", 0.0)) + float(event.get("vx", 0.0)) * age
+                bullet.center_y = float(event.get("y", 0.0)) + float(event.get("vy", 0.0)) * age
+                bullet.change_x = float(event.get("vx", 0.0))
+                bullet.change_y = float(event.get("vy", 0.0))
+                bullet.expires_at = t0 + ttl
+                updated_remote_bullets.append(bullet)
+            self.remote_bullets = updated_remote_bullets
+        elif self.online_client and not self.online_client.connected:
+            # Bei Verbindungsabbruch alle Remote-Skins sofort entfernen.
+            self.remote_players = []
+            self.remote_bullets = []
+            self.remote_portals = {}
 
         if self.state == "lobby":
             # Bewegung auch in der Lobby erlauben.
@@ -952,8 +1170,11 @@ class SurvivalGame(arcade.Window):
                 cx, cy, _r = self.lobby_circles[self.lobby_active_circle]
                 self.player.center_x = cx
                 self.player.center_y = cy
-                self.lobby_timer -= delta_time
-                if self.lobby_timer <= 0:
+                portal_info = self.remote_portals.get(str(self.lobby_active_circle), self.remote_portals.get(self.lobby_active_circle, {}))
+                shared_remaining = float(portal_info.get("remaining", self.lobby_timer))
+                self.lobby_timer = shared_remaining
+                ready = bool(portal_info.get("ready", False)) or shared_remaining <= 0
+                if ready:
                     self.state = "game"
                     self.start_prep()
                     self.lobby_timer = self.lobby_wait_time
@@ -968,7 +1189,13 @@ class SurvivalGame(arcade.Window):
 
             if active >= 0:
                 self.lobby_active_circle = active
-                self.lobby_timer = self.lobby_wait_time
+                portal_info = self.remote_portals.get(str(active), self.remote_portals.get(active, {}))
+                # Countdown wird nur vom ersten Spieler gestartet (Server-Quelle).
+                # Wer später beitritt, übernimmt die bereits laufende Restzeit.
+                if portal_info:
+                    self.lobby_timer = float(portal_info.get("remaining", self.lobby_wait_time))
+                else:
+                    self.lobby_timer = self.lobby_wait_time
                 cx, cy, _r = self.lobby_circles[self.lobby_active_circle]
                 self.player.center_x = cx
                 self.player.center_y = cy
@@ -978,6 +1205,13 @@ class SurvivalGame(arcade.Window):
             return
 
         if self.state != "game":
+            return
+
+        if self.is_downed:
+            if self.respawn_timer > 0:
+                self.respawn_timer -= delta_time
+                if self.respawn_timer < 0:
+                    self.respawn_timer = 0.0
             return
 
         if self.player_damage_cooldown > 0:
@@ -1042,6 +1276,8 @@ class SurvivalGame(arcade.Window):
                 self.total_enemy_kills += 1
                 if self.total_enemy_kills % 20 == 0:
                     self.bandages += 1
+                    self.bandage_message = "Bandage Erhallten"
+                    self.bandage_message_timer = 2.0
                 self.gems += enemy.gem_reward
                 break
 
@@ -1174,7 +1410,12 @@ class SurvivalGame(arcade.Window):
                 self.player_damage_cooldown = 0.35
 
         if self.player_health <= 0:
-            self.state = "gameover"
+            if self.online_client and len(self.remote_players) > 0:
+                self.is_downed = True
+                self.respawn_timer = 20.0
+                self.player_health = 0
+            else:
+                self.state = "gameover"
 
         self.camera.position = (self.player.center_x, self.player.center_y)
 
@@ -1290,16 +1531,24 @@ class SurvivalGame(arcade.Window):
                         self.teleporter_texture,
                         arcade.LBWH(cx - r, cy - r, tex_size, tex_size),
                     )
-                    players_in_this = 1 if idx == self.lobby_active_circle else 0
+                    portal_info = self.remote_portals.get(str(idx), self.remote_portals.get(idx, {}))
+                    players_in_this = int(portal_info.get("count", 0))
+                    if not portal_info:
+                        if idx == self.lobby_active_circle:
+                            players_in_this += 1
+                        for ghost in self.remote_players:
+                            if math.hypot(ghost.center_x - cx, ghost.center_y - cy) <= r:
+                                players_in_this += 1
                     arcade.draw_text(f"{players_in_this}/3",
                                      cx, cy + r + 26,
                                      arcade.color.WHITE, 22,
                                      anchor_x="center")
-                    if idx == self.lobby_active_circle:
+                    if idx == self.lobby_active_circle or players_in_this > 0:
                         # Graue Basis-Ringlinie + gruener Countdown-Ring, der mit der Zeit ablaeuft.
                         ring_radius = r + 6
                         arcade.draw_circle_outline(cx, cy, ring_radius, arcade.color.DARK_GRAY, 5)
-                        remaining = max(0.0, min(1.0, self.lobby_timer / self.lobby_wait_time))
+                        rem_secs = float(portal_info.get("remaining", self.lobby_timer))
+                        remaining = max(0.0, min(1.0, rem_secs / self.lobby_wait_time))
                         sweep = 360.0 * remaining
                         if sweep > 0:
                             segments = max(12, int(80 * remaining))
@@ -1313,6 +1562,29 @@ class SurvivalGame(arcade.Window):
                                 y2 = cy + math.sin(a2) * ring_radius
                                 arcade.draw_line(x1, y1, x2, y2, arcade.color.SPRING_GREEN, 5)
                 self.player_list.draw()
+                arcade.draw_text(
+                    self.player_name if self.player_name else "",
+                    self.player.center_x,
+                    self.player.center_y + self.player.height / 2 + 20,
+                    arcade.color.WHITE,
+                    16,
+                    anchor_x="center",
+                )
+                for ghost in self.remote_players:
+                    w = self.player.width
+                    h = self.player.height
+                    arcade.draw_texture_rect(
+                        self.remote_player_texture,
+                        arcade.LBWH(ghost.center_x - w / 2, ghost.center_y - h / 2, w, h),
+                    )
+                    arcade.draw_text(
+                        ghost.name,
+                        ghost.center_x,
+                        ghost.center_y + h / 2 + 20,
+                        arcade.color.WHITE,
+                        14,
+                        anchor_x="center",
+                    )
 
             if self.lobby_active_circle >= 0:
                 progress = 1.0 - max(0.0, min(1.0, self.lobby_timer / self.lobby_wait_time))
@@ -1344,7 +1616,33 @@ class SurvivalGame(arcade.Window):
                 self.enemies.draw()
                 for bullet in self.bullet_list:
                     arcade.draw_circle_filled(bullet.center_x, bullet.center_y, 5.5, arcade.color.ORANGE_PEEL)
+                now = time.time()
+                active_remote_bullets = []
+                for remote_bullet in self.remote_bullets:
+                    if now >= remote_bullet.expires_at:
+                        self.remote_bullet_seen.add(remote_bullet.id)
+                        continue
+                    remote_bullet.center_x += remote_bullet.change_x * (1.0 / 240.0)
+                    remote_bullet.center_y += remote_bullet.change_y * (1.0 / 240.0)
+                    arcade.draw_circle_filled(remote_bullet.center_x, remote_bullet.center_y, 5.5, arcade.color.LIGHT_BLUE)
+                    active_remote_bullets.append(remote_bullet)
+                self.remote_bullets = active_remote_bullets
                 self.player_list.draw()
+                for ghost in self.remote_players:
+                    w = self.player.width
+                    h = self.player.height
+                    arcade.draw_texture_rect(
+                        self.remote_player_texture,
+                        arcade.LBWH(ghost.center_x - w / 2, ghost.center_y - h / 2, w, h),
+                    )
+                    arcade.draw_text(
+                        ghost.name,
+                        ghost.center_x,
+                        ghost.center_y + h / 2 + 20,
+                        arcade.color.WHITE,
+                        14,
+                        anchor_x="center",
+                    )
                 # Kleine HP-Leiste ueber jedem aktiven Gegner.
                 for enemy in self.enemies:
                     if enemy.is_dying or enemy.is_spawning:
@@ -1374,7 +1672,7 @@ class SurvivalGame(arcade.Window):
             # Anzeigen
             hud_left_x = 20
             hud_left_y = self.height - 40
-            name_text = self.player_name if self.player_name else "Spieler"
+            name_text = self.player_name if self.player_name else ""
             health_ratio = 0 if self.player_health_max <= 0 else self.player_health / self.player_health_max
             arcade.draw_text("Leben",
                              hud_left_x, hud_left_y + 20,
@@ -1455,6 +1753,46 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.GOLD, 30,
                                  anchor_x="center")
                 # Keine Münz-Anzeige mehr
+            if self.bandage_message:
+                arcade.draw_text(self.bandage_message,
+                                 self.width / 2, self.height - 126,
+                                 arcade.color.SPRING_GREEN, 24,
+                                 anchor_x="center")
+            if self.is_downed:
+                self.draw_cached_text(
+                    "downed_title",
+                    "DU BIST KO",
+                    self.width / 2,
+                    self.height / 2 + 48,
+                    arcade.color.RED,
+                    46,
+                    anchor_x="center",
+                )
+                if self.respawn_timer > 0:
+                    self.draw_cached_text(
+                        "downed_timer",
+                        f"Respawn in {int(math.ceil(self.respawn_timer))}s oder Heal durch Teammate",
+                        self.width / 2,
+                        self.height / 2 - 8,
+                        arcade.color.WHITE,
+                        22,
+                        anchor_x="center",
+                    )
+                    self.ui_rects["downed_respawn"] = (0, 0, 0, 0)
+                else:
+                    bx, by, bw, bh = (self.width / 2 - 170, self.height / 2 - 90, 340, 80)
+                    self.ui_rects["downed_respawn"] = (bx, by, bw, bh)
+                    arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.DARK_RED)
+                    arcade.draw_lbwh_rectangle_outline(bx, by, bw, bh, arcade.color.WHITE, 2)
+                    arcade.draw_text(
+                        "Respawn",
+                        bx + bw / 2,
+                        by + bh / 2,
+                        arcade.color.WHITE,
+                        30,
+                        anchor_x="center",
+                        anchor_y="center",
+                    )
 
         elif self.state == "settings":
             arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, (0, 0, 0, 220))
