@@ -463,7 +463,7 @@ class SurvivalGame(arcade.Window):
         if self.weapon_level == 2:
             return 0.3
         if self.weapon_level == 3:
-            return 0.30
+            return 0.1
         return 0.0
 
     def get_weapon_status_text(self):
