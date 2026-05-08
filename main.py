@@ -33,7 +33,7 @@ def main():
         time.sleep(0.35)
         online_client = OnlineClient("127.0.0.1", args.port, args.name)
         online_client.connect()
-        print(f"Kein Server gefunden. Dieser Client hostet jetzt auf Port {args.port}.")
+        print(f"Dieser Client hostet jetzt auf Port {args.port}.")
 
     _game = SurvivalGame(online_client=online_client)
     arcade.run()
