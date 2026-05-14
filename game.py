@@ -37,15 +37,17 @@ SPAWN_PREVIEW_DURATION = 1.0
 
 
 class OnlineClient:
-    def __init__(self, host: str, port: int, name: str):
+    def __init__(self, host: str, port: int, name: str, token: str = ""):
         self.host = host
         self.port = port
         self.name = name
+        self.token = token
         self.player_id = None
         self.connected = False
         self._sock = None
         self._lock = threading.Lock()
         self._snapshot = {}
+        self.last_error = ""
         self._running = False
         self._recv_thread = None
 
@@ -55,7 +57,7 @@ class OnlineClient:
         self._sock.settimeout(0.5)
         self.connected = True
         self._running = True
-        self._send({"type": "hello", "name": self.name})
+        self._send({"type": "hello", "name": self.name, "token": self.token})
         self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
         self._recv_thread.start()
 
@@ -120,6 +122,14 @@ class OnlineClient:
                     msg = json.loads(line)
                     if msg.get("type") == "welcome":
                         self.player_id = msg.get("id")
+                    elif msg.get("type") == "error":
+                        self.last_error = str(msg.get("message", "error"))
+                        self.connected = False
+                        try:
+                            self._sock.close()
+                        except Exception:
+                            pass
+                        break
                     elif msg.get("type") == "snapshot":
                         with self._lock:
                             self._snapshot = msg
@@ -218,6 +228,8 @@ class SurvivalGame(arcade.Window):
         self.auto_shot_waves_left = 0
         self.weapon_shot_cooldown = 0.0
         self.weapon_hold_timer = 0.0
+        self.mouse_hold_initial_delay = 0.18
+        self.mouse_hold_repeat_delay = 0.05
         self.mouse_left_down = False
         self.weapon_level = 1
         self.wave_auto_timer = 5.0
@@ -610,6 +622,12 @@ class SurvivalGame(arcade.Window):
     def on_mouse_press(self, x, y, button, modifiers):
         if button == arcade.MOUSE_BUTTON_LEFT:
             self.mouse_left_down = True
+            # Beim ersten Klick sofort einmal auslösen; Hold-Fire startet erst
+            # nach kurzer Verzögerung, damit kein ungewollter Doppel-Schuss entsteht.
+            handled = self._handle_click(x, y, button)
+            if handled and self.state == "game":
+                self.weapon_hold_timer = max(self.weapon_hold_timer, self.mouse_hold_initial_delay)
+            return handled
         return self._handle_click(x, y, button)
 
     def on_mouse_release(self, x, y, button, modifiers):
@@ -1237,7 +1255,7 @@ class SurvivalGame(arcade.Window):
         # Gedrueckt halten = kontinuierlich schiessen (Cooldown der Waffe bleibt aktiv).
         if self.mouse_left_down and self.weapon_hold_timer <= 0:
             if self.fire_bullet(self.mouse_x, self.mouse_y):
-                self.weapon_hold_timer = 0.02
+                self.weapon_hold_timer = self.mouse_hold_repeat_delay
 
         # Auto-Start nach Vorbereitung
         if not self.wave_active:

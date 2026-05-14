@@ -12,26 +12,28 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--name", default="")
+    parser.add_argument("--token", default="FAULI-PLAY-2026")
     args = parser.parse_args()
 
     if args.server:
-        GameServer(host=args.host, port=args.port).start()
+        # Für weltweiten Zugriff: --host 0.0.0.0 starten.
+        GameServer(host=args.host, port=args.port, join_token=args.token).start()
         return
 
     embedded_server = None
     embedded_server_thread = None
     online_client = None
     try:
-        online_client = OnlineClient(args.host, args.port, args.name)
+        online_client = OnlineClient(args.host, args.port, args.name, args.token)
         online_client.connect()
         print(f"Verbunden mit Server {args.host}:{args.port}")
     except Exception:
         # Kein Server gefunden: dieser erste Client wird automatisch Host.
-        embedded_server = GameServer(host="0.0.0.0", port=args.port)
+        embedded_server = GameServer(host="0.0.0.0", port=args.port, join_token=args.token)
         embedded_server_thread = threading.Thread(target=embedded_server.start, daemon=True)
         embedded_server_thread.start()
         time.sleep(0.35)
-        online_client = OnlineClient("127.0.0.1", args.port, args.name)
+        online_client = OnlineClient("127.0.0.1", args.port, args.name, args.token)
         online_client.connect()
         print(f"Dieser Client hostet jetzt auf Port {args.port}.")
 

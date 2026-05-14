@@ -2,12 +2,14 @@ import json
 import socket
 import threading
 import time
+from pathlib import Path
 
 
 class GameServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765, join_token: str = ""):
         self.host = host
         self.port = port
+        self.join_token = join_token
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.clients = {}
@@ -18,6 +20,9 @@ class GameServer:
         self.portal_started_at = {0: None, 1: None, 2: None}
         self.next_bullet_id = 1
         self.bullet_events = []
+        self.names_file = Path(__file__).resolve().parent / "Namen.txt"
+        self.bound_names = self._load_bound_names()
+        self.name_history = self._load_name_history()
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
@@ -28,7 +33,7 @@ class GameServer:
         try:
             while self.running:
                 conn, _addr = self.server_socket.accept()
-                threading.Thread(target=self._handle_client, args=(conn,), daemon=True).start()
+                threading.Thread(target=self._handle_client, args=(conn, _addr), daemon=True).start()
         finally:
             self.stop()
 
@@ -51,9 +56,63 @@ class GameServer:
         data = (json.dumps(payload) + "\n").encode("utf-8")
         conn.sendall(data)
 
-    def _handle_client(self, conn):
+    def _load_bound_names(self):
+        result = {}
+        if not self.names_file.exists():
+            return result
+        try:
+            for raw in self.names_file.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                parts = line.rsplit(" ", 1)
+                if len(parts) != 2:
+                    continue
+                name, ip = parts[0].strip(), parts[1].strip()
+                if name and ip:
+                    result[ip] = name
+        except Exception:
+            return {}
+        return result
+
+    def _save_bound_names(self):
+        try:
+            # Persistiere die komplette Historie aller akzeptierten Namen+IPs.
+            lines = sorted(self.name_history)
+            self.names_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _load_name_history(self):
+        result = set()
+        if not self.names_file.exists():
+            return result
+        try:
+            for raw in self.names_file.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                parts = line.rsplit(" ", 1)
+                if len(parts) != 2:
+                    continue
+                name, ip = parts[0].strip(), parts[1].strip()
+                if name and ip:
+                    result.add(f"{name} {ip}")
+        except Exception:
+            return set()
+        return result
+
+    def _name_taken_by_other_ip(self, name: str, ip: str) -> bool:
+        lname = name.casefold()
+        for existing_ip, existing_name in self.bound_names.items():
+            if existing_ip != ip and existing_name.casefold() == lname:
+                return True
+        return False
+
+    def _handle_client(self, conn, addr):
         conn.settimeout(0.5)
         player_id = None
+        client_ip = str(addr[0]) if addr else "0.0.0.0"
         buffer = ""
         try:
             while self.running:
@@ -73,13 +132,43 @@ class GameServer:
                     msg = json.loads(line)
                     msg_type = msg.get("type")
                     if msg_type == "hello":
+                        if self.join_token and str(msg.get("token", "")) != self.join_token:
+                            self._send(conn, {"type": "error", "message": "invalid_token"})
+                            try:
+                                conn.close()
+                            except Exception:
+                                pass
+                            return
+                        requested_name = str(msg.get("name", "")).strip()
+                        if requested_name.casefold() == "spieler":
+                            requested_name = ""
                         with self.lock:
+                            fixed_name = self.bound_names.get(client_ip, "")
+                            if not fixed_name:
+                                if not requested_name:
+                                    self._send(conn, {"type": "error", "message": "name_required"})
+                                    try:
+                                        conn.close()
+                                    except Exception:
+                                        pass
+                                    return
+                                if self._name_taken_by_other_ip(requested_name, client_ip):
+                                    self._send(conn, {"type": "error", "message": "name_taken"})
+                                    try:
+                                        conn.close()
+                                    except Exception:
+                                        pass
+                                    return
+                                fixed_name = requested_name
+                                self.bound_names[client_ip] = fixed_name
+                            self.name_history.add(f"{fixed_name} {client_ip}")
+                            self._save_bound_names()
                             player_id = self.next_id
                             self.next_id += 1
                             self.clients[conn] = player_id
                             self.players[player_id] = {
                                 "id": player_id,
-                                "name": str(msg.get("name", f"User{player_id}")),
+                                "name": fixed_name,
                                 "x": 0.0,
                                 "y": 0.0,
                                 "health": 0.0,
@@ -88,6 +177,7 @@ class GameServer:
                                 "in_portal": False,
                                 "portal_index": -1,
                                 "dead": False,
+                                "ip": client_ip,
                             }
                         self._send(conn, {"type": "welcome", "id": player_id})
                     elif msg_type == "state" and player_id is not None:
