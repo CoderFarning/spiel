@@ -83,6 +83,14 @@ class GameServer:
         except Exception:
             pass
 
+    def _append_name_entry(self, name: str, ip: str):
+        entry = f"{name} {ip}"
+        try:
+            with self.names_file.open("a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+        except Exception:
+            pass
+
     def _load_name_history(self):
         result = set()
         if not self.names_file.exists():
@@ -146,12 +154,7 @@ class GameServer:
                             fixed_name = self.bound_names.get(client_ip, "")
                             if not fixed_name:
                                 if not requested_name:
-                                    self._send(conn, {"type": "error", "message": "name_required"})
-                                    try:
-                                        conn.close()
-                                    except Exception:
-                                        pass
-                                    return
+                                    requested_name = f"User{self.next_id}"
                                 if self._name_taken_by_other_ip(requested_name, client_ip):
                                     self._send(conn, {"type": "error", "message": "name_taken"})
                                     try:
@@ -163,6 +166,8 @@ class GameServer:
                                 self.bound_names[client_ip] = fixed_name
                             self.name_history.add(f"{fixed_name} {client_ip}")
                             self._save_bound_names()
+                            # Zusätzlich sofort appenden, damit Eintrag direkt sichtbar ist.
+                            self._append_name_entry(fixed_name, client_ip)
                             player_id = self.next_id
                             self.next_id += 1
                             self.clients[conn] = player_id
