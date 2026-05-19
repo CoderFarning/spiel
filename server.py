@@ -79,8 +79,14 @@ class GameServer:
 
     def _save_bound_names(self):
         try:
-            # Persistiere nur angemeldete, feste Name<->IP-Bindungen.
-            lines = sorted(f"{name} {ip}" for ip, name in self.bound_names.items())
+            # Persistiere feste Name<->IP-Bindungen plus Passwort-Hash (falls Konto vorhanden).
+            lines = []
+            for ip, name in sorted(self.bound_names.items()):
+                acc = self.accounts.get(ip)
+                if acc and acc.get("password_hash"):
+                    lines.append(f"{name} {ip} {acc['password_hash']}")
+                else:
+                    lines.append(f"{name} {ip}")
             self.names_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         except Exception:
             pass
@@ -260,7 +266,7 @@ class GameServer:
                                 if not acc:
                                     self._send(conn, {"type": "error", "message": "account_missing"})
                                     continue
-                                if acc["name"] != name or acc["password_hash"] != self._hash_password(password):
+                                if acc["password_hash"] != self._hash_password(password):
                                     self._send(conn, {"type": "error", "message": "auth_failed"})
                                     continue
                                 self.bound_names[client_ip] = acc["name"]

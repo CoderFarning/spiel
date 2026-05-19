@@ -170,7 +170,7 @@ class Enemy(arcade.Sprite):
         self.gem_reward = 10
         self.touch_damage = 10
         self.final_texture = None
-        self.final_scale = 0.5
+        self.final_scale = 0.3
         self.is_dying = False
         self.death_timer = 0.0
         self.is_spawning = False
@@ -603,15 +603,6 @@ class SurvivalGame(arcade.Window):
                 name_rect = self.ui_rects["menu_name_field"]
                 pass_rect = self.ui_rects["menu_pass_field"]
                 play_rect = self.ui_rects["menu_login_play"]
-                if self.point_in_rect(x, y, ip_rect, padding=30):
-                    self.menu_focus_field = "ip"
-                    return True
-                if self.point_in_rect(x, y, name_rect, padding=30):
-                    self.menu_focus_field = "name"
-                    return True
-                if self.point_in_rect(x, y, pass_rect, padding=30):
-                    self.menu_focus_field = "password"
-                    return True
                 if self.point_in_rect(x, y, play_rect, padding=80):
                     if not self.player_name.strip() or not self.menu_password_input.strip():
                         return True
@@ -629,11 +620,15 @@ class SurvivalGame(arcade.Window):
                     self.lobby_timer = self.lobby_wait_time
                     self.lobby_active_circle = -1
                     return True
-            back = self.ui_rects.get("menu_back_choice", (0, 0, 0, 0))
-            if self.point_in_rect(x, y, back, padding=80):
-                self.reset_start_menu_state()
-                return True
-
+                if self.point_in_rect(x, y, ip_rect, padding=30):
+                    self.menu_focus_field = "ip"
+                    return True
+                if self.point_in_rect(x, y, name_rect, padding=30):
+                    self.menu_focus_field = "name"
+                    return True
+                if self.point_in_rect(x, y, pass_rect, padding=30):
+                    self.menu_focus_field = "password"
+                    return True
         elif self.state == "lobby":
             bx, by, bw, bh = self.ui_rects.get("lobby_leave", (0, 0, 0, 0))
             if self.lobby_active_circle >= 0 and self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
@@ -726,7 +721,8 @@ class SurvivalGame(arcade.Window):
 
     def on_mouse_press(self, x, y, button, modifiers):
         if button == arcade.MOUSE_BUTTON_LEFT:
-            self.mouse_left_down = True
+            # Hold-Fire nur im Spielzustand aktivieren, nie in Menüs.
+            self.mouse_left_down = (self.state == "game")
             # Beim ersten Klick sofort einmal auslösen; Hold-Fire startet erst
             # nach kurzer Verzögerung, damit kein ungewollter Doppel-Schuss entsteht.
             handled = self._handle_click(x, y, button)
@@ -905,7 +901,7 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["start_button"] = (bx, by, bw, bh)
         self.ui_rects["menu_login"] = (bx, by + 70, bw, bh)
         self.ui_rects["menu_guest"] = (bx, by - 70, bw, bh)
-        self.ui_rects["menu_back_choice"] = (self.width / 2 - 120, self.height / 2 - 320, 240, 64)
+        self.ui_rects["menu_back_choice"] = (0, 0, 0, 0)
         field_w = 520
         field_h = 60
         field_x = self.width / 2 - field_w / 2
@@ -1599,7 +1595,7 @@ class SurvivalGame(arcade.Window):
                 touch_damage = 10
 
             enemy = Enemy(spawn_texture)
-            enemy.scale = 0.28
+            enemy.scale = 0.3
             enemy.base_speed = base_speed
             enemy.hit_points = hit_points
             enemy.max_hit_points = hit_points
@@ -1607,7 +1603,7 @@ class SurvivalGame(arcade.Window):
             enemy.gem_reward = gem_reward
             enemy.touch_damage = touch_damage
             enemy.final_texture = final_texture
-            enemy.final_scale = 0.5
+            enemy.final_scale = 0.3
             enemy.is_spawning = True
             enemy.spawn_timer = SPAWN_PREVIEW_DURATION
             for _attempt in range(24):
@@ -1643,16 +1639,16 @@ class SurvivalGame(arcade.Window):
                 c_guest = self.lerp_color(arcade.color.DARK_SPRING_GREEN, arcade.color.SPRING_GREEN, lvl_guest)
                 self.draw_scaled_rect(lbx, lby, lbw, lbh, c_login, lvl_login, scale_factor=0.18)
                 self.draw_scaled_rect(gbx, gby, gbw, gbh, c_guest, lvl_guest, scale_factor=0.18)
-                arcade.draw_text("ANMELDEN",
+                arcade.draw_text("Registrieren",
                                  lbx + lbw/2, lby + lbh/2,
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
-                arcade.draw_text("So spielen",
+                arcade.draw_text("Anmelden",
                                  gbx + gbw/2, gby + gbh/2,
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
                 self.start_button = None
-            elif self.menu_mode == "login":
+            elif self.menu_mode in ("login", "guest"):
                 bx, by, bw, bh = self.ui_rects["menu_login_play"]
                 level = self.ease(self.hover_level.get("menu_login_play", 0.0))
                 start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
@@ -1664,14 +1660,24 @@ class SurvivalGame(arcade.Window):
                 self.start_button = (bx, by, bw, bh)
                 ipx, ipy, ipw, iph = self.ui_rects["menu_ip_field"]
                 nx, ny, nw, nh = self.ui_rects["menu_name_field"]
+                px, py, pw, ph = self.ui_rects["menu_pass_field"]
+                if self.menu_auth_action != "register":
+                    arcade.draw_text("Anmelden",
+                                     self.width/2, self.height/2 + 170,
+                                     arcade.color.WHITE, 34,
+                                     anchor_x="center")
                 arcade.draw_text("IP:", ipx, ipy + iph + 8, arcade.color.WHITE, 24)
                 arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
+                arcade.draw_text("Passwort:", px, py + ph + 8, arcade.color.WHITE, 24)
                 ip_border = arcade.color.GOLD if self.menu_focus_field == "ip" else arcade.color.WHITE
                 name_border = arcade.color.GOLD if self.menu_focus_field == "name" else arcade.color.WHITE
+                pass_border = arcade.color.GOLD if self.menu_focus_field == "password" else arcade.color.WHITE
                 arcade.draw_lbwh_rectangle_outline(ipx, ipy, ipw, iph, ip_border, border_width=3)
                 arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
+                arcade.draw_lbwh_rectangle_outline(px, py, pw, ph, pass_border, border_width=3)
                 ip_caret = "|" if (self.caret_visible and self.menu_focus_field == "ip") else ""
                 name_caret = "|" if (self.caret_visible and self.menu_focus_field == "name") else ""
+                pass_caret = "|" if (self.caret_visible and self.menu_focus_field == "password") else ""
                 arcade.draw_text(self.menu_ip_input + ip_caret,
                                  ipx + 10, ipy + iph/2,
                                  arcade.color.WHITE, 26,
@@ -1680,33 +1686,10 @@ class SurvivalGame(arcade.Window):
                                  nx + 10, ny + nh/2,
                                  arcade.color.WHITE, 26,
                                  anchor_y="center")
-                bbx, bby, bbw, bbh = self.ui_rects["menu_back_choice"]
-                arcade.draw_lbwh_rectangle_filled(bbx, bby, bbw, bbh, arcade.color.DARK_RED)
-                arcade.draw_lbwh_rectangle_outline(bbx, bby, bbw, bbh, arcade.color.WHITE, 2)
-                arcade.draw_text("Zurück",
-                                 bbx + bbw/2, bby + bbh/2,
-                                 arcade.color.WHITE, 22,
-                                 anchor_x="center", anchor_y="center")
-            elif self.menu_mode == "guest":
-                gbx, gby, gbw, gbh = self.ui_rects["menu_guest_play"]
-                level = self.ease(self.hover_level.get("menu_guest_play", 0.0))
-                gcolor = self.lerp_color(arcade.color.DARK_SPRING_GREEN, arcade.color.SPRING_GREEN, level)
-                self.draw_scaled_rect(gbx, gby, gbw, gbh, gcolor, level, scale_factor=0.22)
-                arcade.draw_text("Spielen",
-                                 gbx + gbw/2, gby + gbh/2,
-                                 arcade.color.WHITE, 30,
-                                 anchor_x="center", anchor_y="center")
-                arcade.draw_text("Name: Gast",
-                                 self.width/2, gby + gbh + 40,
-                                 arcade.color.WHITE, 24,
-                                 anchor_x="center")
-                bbx, bby, bbw, bbh = self.ui_rects["menu_back_choice"]
-                arcade.draw_lbwh_rectangle_filled(bbx, bby, bbw, bbh, arcade.color.DARK_RED)
-                arcade.draw_lbwh_rectangle_outline(bbx, bby, bbw, bbh, arcade.color.WHITE, 2)
-                arcade.draw_text("Zurück",
-                                 bbx + bbw/2, bby + bbh/2,
-                                 arcade.color.WHITE, 22,
-                                 anchor_x="center", anchor_y="center")
+                arcade.draw_text(("*" * len(self.menu_password_input)) + pass_caret,
+                                 px + 10, py + ph/2,
+                                 arcade.color.WHITE, 26,
+                                 anchor_y="center")
 
         elif self.state == "lobby":
             with self.camera.activate():
