@@ -1671,31 +1671,29 @@ class SurvivalGame(arcade.Window):
                 ipx, ipy, ipw, iph = self.ui_rects["menu_ip_field"]
                 nx, ny, nw, nh = self.ui_rects["menu_name_field"]
                 px, py, pw, ph = self.ui_rects["menu_pass_field"]
-                if self.menu_auth_action != "register":
-                    arcade.draw_text("Anmelden",
-                                     self.width/2, self.height/2 + 170,
-                                     arcade.color.WHITE, 34,
-                                     anchor_x="center")
-                arcade.draw_text("IP:", ipx, ipy + iph + 8, arcade.color.WHITE, 24)
-                arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
                 arcade.draw_text("Passwort:", px, py + ph + 8, arcade.color.WHITE, 24)
-                ip_border = arcade.color.GOLD if self.menu_focus_field == "ip" else arcade.color.WHITE
-                name_border = arcade.color.GOLD if self.menu_focus_field == "name" else arcade.color.WHITE
+                if self.menu_auth_action == "register":
+                    arcade.draw_text("IP:", ipx, ipy + iph + 8, arcade.color.WHITE, 24)
+                    arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
+                ip_border = arcade.color.GOLD if (self.menu_focus_field == "ip" and self.menu_auth_action == "register") else arcade.color.WHITE
+                name_border = arcade.color.GOLD if (self.menu_focus_field == "name" and self.menu_auth_action == "register") else arcade.color.WHITE
                 pass_border = arcade.color.GOLD if self.menu_focus_field == "password" else arcade.color.WHITE
-                arcade.draw_lbwh_rectangle_outline(ipx, ipy, ipw, iph, ip_border, border_width=3)
-                arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
+                if self.menu_auth_action == "register":
+                    arcade.draw_lbwh_rectangle_outline(ipx, ipy, ipw, iph, ip_border, border_width=3)
+                    arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
                 arcade.draw_lbwh_rectangle_outline(px, py, pw, ph, pass_border, border_width=3)
                 ip_caret = "|" if (self.caret_visible and self.menu_focus_field == "ip") else ""
                 name_caret = "|" if (self.caret_visible and self.menu_focus_field == "name") else ""
                 pass_caret = "|" if (self.caret_visible and self.menu_focus_field == "password") else ""
-                arcade.draw_text(self.menu_ip_input + ip_caret,
-                                 ipx + 10, ipy + iph/2,
-                                 arcade.color.WHITE, 26,
-                                 anchor_y="center")
-                arcade.draw_text(self.player_name + name_caret,
-                                 nx + 10, ny + nh/2,
-                                 arcade.color.WHITE, 26,
-                                 anchor_y="center")
+                if self.menu_auth_action == "register":
+                    arcade.draw_text(self.menu_ip_input + ip_caret,
+                                     ipx + 10, ipy + iph/2,
+                                     arcade.color.WHITE, 26,
+                                     anchor_y="center")
+                    arcade.draw_text(self.player_name + name_caret,
+                                     nx + 10, ny + nh/2,
+                                     arcade.color.WHITE, 26,
+                                     anchor_y="center")
                 arcade.draw_text(("*" * len(self.menu_password_input)) + pass_caret,
                                  px + 10, py + ph/2,
                                  arcade.color.WHITE, 26,
