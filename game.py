@@ -237,6 +237,7 @@ class SurvivalGame(arcade.Window):
         self.player_damage_cooldown = 0.0
         self.player_name = ""
         self.name_confirmed = False
+        self.menu_mode = "choice"
         self.lobby_wait_time = 10.0
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
@@ -307,6 +308,7 @@ class SurvivalGame(arcade.Window):
         if self.player_name.strip().lower() == "spieler":
             self.player_name = ""
         self.name_confirmed = False
+        self.menu_mode = "choice"
         self.state = "menu"
 
     # ---------------- SETUP ----------------
@@ -398,6 +400,8 @@ class SurvivalGame(arcade.Window):
                 self.admin_input = self.admin_input[:-1]
                 return
         if self.state == "menu":
+            if self.menu_mode != "login":
+                return
             if key == arcade.key.ENTER or key == arcade.key.RETURN:
                 if self.player_name.strip():
                     self.name_confirmed = True
@@ -516,17 +520,38 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
 
         if self.state == "menu":
+            if self.menu_mode == "choice":
+                bx, by, bw, bh = self.ui_rects["menu_login"]
+                if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
+                    self.menu_mode = "login"
+                    self.name_confirmed = False
+                    return True
+                gx, gy, gw, gh = self.ui_rects["menu_guest"]
+                if self.point_in_rect(x, y, (gx, gy, gw, gh), padding=20):
+                    if not self.player_name.strip():
+                        self.player_name = "Gast"
+                    self.name_confirmed = True
+                    self.setup_game()
+                    self.state = "lobby"
+                    self.lobby_timer = self.lobby_wait_time
+                    self.lobby_active_circle = -1
+                    return True
+                return True
             bx, by, bw, bh = self.ui_rects["start_button"]
-            if self.point_in_rect(x, y, (bx, by, bw, bh)):
-                # Single-click start: if a name is present, confirm and start immediately.
+            if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
                 if not self.name_confirmed and self.player_name.strip():
                     self.name_confirmed = True
-                if not self.name_confirmed:
+                if not self.name_confirmed or not self.player_name.strip():
                     return True
                 self.setup_game()
                 self.state = "lobby"
                 self.lobby_timer = self.lobby_wait_time
                 self.lobby_active_circle = -1
+                return True
+            back = self.ui_rects.get("menu_back_choice", (0, 0, 0, 0))
+            if self.point_in_rect(x, y, back, padding=20):
+                self.menu_mode = "choice"
+                self.name_confirmed = False
                 return True
 
         elif self.state == "lobby":
@@ -643,6 +668,8 @@ class SurvivalGame(arcade.Window):
             if text and text.isprintable():
                 self.admin_input += text
         if self.state == "menu":
+            if self.menu_mode != "login":
+                return
             if self.name_confirmed:
                 return
             if text and text.isprintable():
@@ -789,6 +816,9 @@ class SurvivalGame(arcade.Window):
         bx = self.width // 2 - bw // 2
         by = self.height // 2 - bh // 2
         self.ui_rects["start_button"] = (bx, by, bw, bh)
+        self.ui_rects["menu_login"] = (bx, by + 70, bw, bh)
+        self.ui_rects["menu_guest"] = (bx, by - 70, bw, bh)
+        self.ui_rects["menu_back_choice"] = (self.width / 2 - 120, self.height / 2 - 320, 240, 64)
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
@@ -876,7 +906,9 @@ class SurvivalGame(arcade.Window):
     def update_hover_levels(self, delta_time: float):
         active_keys = []
         if self.state == "menu":
-            if self.name_confirmed:
+            if self.menu_mode == "choice":
+                active_keys = ["menu_login", "menu_guest"]
+            elif self.name_confirmed:
                 active_keys = ["start_button"]
         elif self.state == "game":
             active_keys = ["wave_button"]
@@ -1507,26 +1539,36 @@ class SurvivalGame(arcade.Window):
                              arcade.color.WHITE, 60,
                              anchor_x="center")
             caret = "|" if self.caret_visible else ""
-            bx, by, bw, bh = self.ui_rects["start_button"]
-
-            start_ready = self.name_confirmed
-            if start_ready:
+            if self.menu_mode == "choice":
+                lbx, lby, lbw, lbh = self.ui_rects["menu_login"]
+                gbx, gby, gbw, gbh = self.ui_rects["menu_guest"]
+                lvl_login = self.ease(self.hover_level.get("menu_login", 0.0))
+                lvl_guest = self.ease(self.hover_level.get("menu_guest", 0.0))
+                c_login = self.lerp_color(arcade.color.DARK_BLUE_GRAY, arcade.color.BLUE_GRAY, lvl_login)
+                c_guest = self.lerp_color(arcade.color.DARK_SPRING_GREEN, arcade.color.SPRING_GREEN, lvl_guest)
+                self.draw_scaled_rect(lbx, lby, lbw, lbh, c_login, lvl_login, scale_factor=0.18)
+                self.draw_scaled_rect(gbx, gby, gbw, gbh, c_guest, lvl_guest, scale_factor=0.18)
+                arcade.draw_text("ANMELDEN",
+                                 lbx + lbw/2, lby + lbh/2,
+                                 arcade.color.WHITE, 30,
+                                 anchor_x="center", anchor_y="center")
+                arcade.draw_text("So spielen",
+                                 gbx + gbw/2, gby + gbh/2,
+                                 arcade.color.WHITE, 30,
+                                 anchor_x="center", anchor_y="center")
+                self.start_button = None
+            else:
+                bx, by, bw, bh = self.ui_rects["start_button"]
                 level = self.ease(self.hover_level.get("start_button", 0.0))
                 start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
-                self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.28)
+                self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.22)
                 arcade.draw_text("START",
                                  self.width//2, self.height//2,
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
                 self.start_button = (bx, by, bw, bh)
-            else:
-                arcade.draw_text("Name eingeben und mit Enter bestätigen",
-                                 self.width//2, self.height//2,
-                                 arcade.color.LIGHT_GRAY, 24,
-                                 anchor_x="center", anchor_y="center")
-                self.start_button = None
-            # Name-Feld unter START (nur solange nicht bestätigt)
-            if not self.name_confirmed:
+            # Name-Feld nur im Anmelden-Modus
+            if self.menu_mode == "login":
                 field_w = 520
                 field_h = 60
                 field_x = self.width/2 - field_w/2
@@ -1538,6 +1580,13 @@ class SurvivalGame(arcade.Window):
                                  field_x + 10, field_y + field_h/2,
                                  arcade.color.WHITE, 26,
                                  anchor_y="center")
+                bbx, bby, bbw, bbh = self.ui_rects["menu_back_choice"]
+                arcade.draw_lbwh_rectangle_filled(bbx, bby, bbw, bbh, arcade.color.DARK_RED)
+                arcade.draw_lbwh_rectangle_outline(bbx, bby, bbw, bbh, arcade.color.WHITE, 2)
+                arcade.draw_text("Zurück",
+                                 bbx + bbw/2, bby + bbh/2,
+                                 arcade.color.WHITE, 22,
+                                 anchor_x="center", anchor_y="center")
 
         elif self.state == "lobby":
             with self.camera.activate():
