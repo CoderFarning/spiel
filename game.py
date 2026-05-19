@@ -48,6 +48,8 @@ class OnlineClient:
         self._lock = threading.Lock()
         self._snapshot = {}
         self.last_error = ""
+        self.auth_ok = False
+        self.auth_name = ""
         self._running = False
         self._recv_thread = None
 
@@ -110,6 +112,12 @@ class OnlineClient:
             return
         self._send({"type": "register_name", "name": name})
 
+    def send_auth(self, mode: str, name: str, password: str):
+        if not self.connected:
+            return
+        self.auth_ok = False
+        self._send({"type": "auth", "mode": mode, "name": name, "password": password})
+
     def _recv_loop(self):
         buffer = ""
         while self._running and self._sock:
@@ -135,6 +143,9 @@ class OnlineClient:
                         except Exception:
                             pass
                         break
+                    elif msg.get("type") == "auth_ok":
+                        self.auth_ok = True
+                        self.auth_name = str(msg.get("name", ""))
                     elif msg.get("type") == "snapshot":
                         with self._lock:
                             self._snapshot = msg
@@ -245,6 +256,8 @@ class SurvivalGame(arcade.Window):
         self.menu_mode = "choice"
         self.menu_ip_input = "127.0.0.1"
         self.menu_focus_field = "name"
+        self.menu_password_input = ""
+        self.menu_auth_action = "register"
         self.lobby_wait_time = 10.0
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
@@ -318,12 +331,15 @@ class SurvivalGame(arcade.Window):
         self.menu_mode = "choice"
         self.menu_ip_input = "127.0.0.1"
         self.menu_focus_field = "name"
+        self.menu_password_input = ""
+        self.menu_auth_action = "register"
         self.state = "menu"
 
     def reset_start_menu_state(self):
         self.menu_mode = "choice"
         self.menu_ip_input = "127.0.0.1"
         self.menu_focus_field = "name"
+        self.menu_password_input = ""
         self.player_name = ""
         self.name_confirmed = False
 
@@ -449,9 +465,11 @@ class SurvivalGame(arcade.Window):
                 # nur Button-Klicks sollen starten.
                 return
             if key == arcade.key.BACKSPACE:
-                if self.menu_mode == "login":
+                if self.menu_mode in ("login", "guest"):
                     if self.menu_focus_field == "ip":
                         self.menu_ip_input = self.menu_ip_input[:-1]
+                    elif self.menu_focus_field == "password":
+                        self.menu_password_input = self.menu_password_input[:-1]
                     else:
                         self.player_name = self.player_name[:-1]
                         self.name_confirmed = False
@@ -570,18 +588,20 @@ class SurvivalGame(arcade.Window):
                 bx, by, bw, bh = self.ui_rects["menu_login"]
                 if self.point_in_rect(x, y, (bx, by, bw, bh), padding=80):
                     self.menu_mode = "login"
+                    self.menu_auth_action = "register"
                     self.name_confirmed = False
                     self.menu_focus_field = "name"
                     return True
                 gx, gy, gw, gh = self.ui_rects["menu_guest"]
                 if self.point_in_rect(x, y, (gx, gy, gw, gh), padding=80):
                     self.menu_mode = "guest"
-                    self.player_name = "Gast"
+                    self.menu_auth_action = "login"
                     return True
                 return True
-            if self.menu_mode == "login":
+            if self.menu_mode in ("login", "guest"):
                 ip_rect = self.ui_rects["menu_ip_field"]
                 name_rect = self.ui_rects["menu_name_field"]
+                pass_rect = self.ui_rects["menu_pass_field"]
                 play_rect = self.ui_rects["menu_login_play"]
                 if self.point_in_rect(x, y, ip_rect, padding=30):
                     self.menu_focus_field = "ip"
@@ -589,22 +609,20 @@ class SurvivalGame(arcade.Window):
                 if self.point_in_rect(x, y, name_rect, padding=30):
                     self.menu_focus_field = "name"
                     return True
+                if self.point_in_rect(x, y, pass_rect, padding=30):
+                    self.menu_focus_field = "password"
+                    return True
                 if self.point_in_rect(x, y, play_rect, padding=80):
-                    if not self.player_name.strip():
+                    if not self.player_name.strip() or not self.menu_password_input.strip():
                         return True
                     self.persist_login_name_local(self.player_name.strip())
                     if self.online_client and self.online_client.connected:
+                        self.online_client.send_auth(
+                            self.menu_auth_action,
+                            self.player_name.strip(),
+                            self.menu_password_input.strip(),
+                        )
                         self.online_client.send_register_name(self.player_name.strip())
-                    self.name_confirmed = True
-                    self.setup_game()
-                    self.state = "lobby"
-                    self.lobby_timer = self.lobby_wait_time
-                    self.lobby_active_circle = -1
-                    return True
-            if self.menu_mode == "guest":
-                gbx, gby, gbw, gbh = self.ui_rects["menu_guest_play"]
-                if self.point_in_rect(x, y, (gbx, gby, gbw, gbh), padding=80):
-                    self.player_name = "Gast"
                     self.name_confirmed = True
                     self.setup_game()
                     self.state = "lobby"
@@ -735,9 +753,12 @@ class SurvivalGame(arcade.Window):
             if self.name_confirmed:
                 return
             if text and text.isprintable():
-                if self.menu_mode == "login" and self.menu_focus_field == "ip":
+                if self.menu_focus_field == "ip":
                     if len(self.menu_ip_input) < 32:
                         self.menu_ip_input += text
+                elif self.menu_focus_field == "password":
+                    if len(self.menu_password_input) < 24:
+                        self.menu_password_input += text
                 else:
                     if len(self.player_name) < 16:
                         self.player_name += text
@@ -890,8 +911,9 @@ class SurvivalGame(arcade.Window):
         field_x = self.width / 2 - field_w / 2
         self.ui_rects["menu_ip_field"] = (field_x, self.height / 2 - 140, field_w, field_h)
         self.ui_rects["menu_name_field"] = (field_x, self.height / 2 - 240, field_w, field_h)
+        self.ui_rects["menu_pass_field"] = (field_x, self.height / 2 - 340, field_w, field_h)
         self.ui_rects["menu_login_play"] = (self.width / 2 - 180, self.height / 2 - 20, 360, 90)
-        self.ui_rects["menu_guest_play"] = (self.width / 2 - 180, self.height / 2 - 30, 360, 90)
+        self.ui_rects["menu_guest_play"] = (0, 0, 0, 0)
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
@@ -981,10 +1003,8 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             if self.menu_mode == "choice":
                 active_keys = ["menu_login", "menu_guest"]
-            elif self.menu_mode == "login":
+            elif self.menu_mode in ("login", "guest"):
                 active_keys = ["menu_login_play"]
-            elif self.menu_mode == "guest":
-                active_keys = ["menu_guest_play"]
         elif self.state == "game":
             active_keys = ["wave_button"]
             active_keys.extend(["upgrade_panel_window"])

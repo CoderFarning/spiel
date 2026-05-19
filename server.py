@@ -2,6 +2,7 @@ import json
 import socket
 import threading
 import time
+import hashlib
 from pathlib import Path
 
 
@@ -21,13 +22,15 @@ class GameServer:
         self.next_bullet_id = 1
         self.bullet_events = []
         self.names_file = Path(__file__).resolve().parent / "Namen.txt"
+        self.accounts_file = Path(__file__).resolve().parent / "Konten.txt"
         self.bound_names = self._load_bound_names()
+        self.accounts = self._load_accounts()
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(32)
         self.running = True
-        print(f"Server läuft auf {self.host}:{self.port}")
+        print(f"Server läuft auf -->  {self.host}:{self.port}")
         threading.Thread(target=self._broadcast_loop, daemon=True).start()
         try:
             while self.running:
@@ -88,6 +91,37 @@ class GameServer:
             if existing_ip != ip and existing_name.casefold() == lname:
                 return True
         return False
+
+    def _hash_password(self, password: str) -> str:
+        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+    def _load_accounts(self):
+        result = {}
+        if not self.accounts_file.exists():
+            return result
+        try:
+            for raw in self.accounts_file.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                parts = line.split(" ")
+                if len(parts) != 3:
+                    continue
+                name, ip, pwd_hash = parts
+                if name and ip and pwd_hash:
+                    result[ip] = {"name": name, "password_hash": pwd_hash}
+        except Exception:
+            return {}
+        return result
+
+    def _save_accounts(self):
+        try:
+            lines = []
+            for ip, entry in sorted(self.accounts.items()):
+                lines.append(f"{entry['name']} {ip} {entry['password_hash']}")
+            self.accounts_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        except Exception:
+            pass
 
     def _handle_client(self, conn, addr):
         conn.settimeout(0.5)
@@ -195,6 +229,48 @@ class GameServer:
                             player = self.players.get(player_id)
                             if player:
                                 player["name"] = fixed_name
+                    elif msg_type == "auth" and player_id is not None:
+                        mode = str(msg.get("mode", "")).strip().lower()
+                        name = str(msg.get("name", "")).strip()
+                        password = str(msg.get("password", "")).strip()
+                        if not name or not password:
+                            self._send(conn, {"type": "error", "message": "auth_invalid"})
+                            continue
+                        with self.lock:
+                            if mode == "register":
+                                if client_ip in self.accounts:
+                                    self._send(conn, {"type": "error", "message": "account_exists"})
+                                    continue
+                                if self._name_taken_by_other_ip(name, client_ip):
+                                    self._send(conn, {"type": "error", "message": "name_taken"})
+                                    continue
+                                self.accounts[client_ip] = {
+                                    "name": name,
+                                    "password_hash": self._hash_password(password),
+                                }
+                                self.bound_names[client_ip] = name
+                                self._save_accounts()
+                                self._save_bound_names()
+                                player = self.players.get(player_id)
+                                if player:
+                                    player["name"] = name
+                                self._send(conn, {"type": "auth_ok", "name": name, "mode": "register"})
+                            elif mode == "login":
+                                acc = self.accounts.get(client_ip)
+                                if not acc:
+                                    self._send(conn, {"type": "error", "message": "account_missing"})
+                                    continue
+                                if acc["name"] != name or acc["password_hash"] != self._hash_password(password):
+                                    self._send(conn, {"type": "error", "message": "auth_failed"})
+                                    continue
+                                self.bound_names[client_ip] = acc["name"]
+                                self._save_bound_names()
+                                player = self.players.get(player_id)
+                                if player:
+                                    player["name"] = acc["name"]
+                                self._send(conn, {"type": "auth_ok", "name": acc["name"], "mode": "login"})
+                            else:
+                                self._send(conn, {"type": "error", "message": "auth_mode_invalid"})
                     elif msg_type == "shot" and player_id is not None:
                         with self.lock:
                             shot = {
