@@ -14,7 +14,7 @@ def main():
     parser.add_argument("--server", action="store_true")
     parser.add_argument("--host", default=CENTRAL_SERVER_HOST)
     parser.add_argument("--port", type=int, default=CENTRAL_SERVER_PORT)
-    parser.add_argument("--name", default="")
+    parser.add_argument("--nam´e", default="")
     parser.add_argument("--token", default="FAULI-PLAY-2026")
     args = parser.parse_args()
 
