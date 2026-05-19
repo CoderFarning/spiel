@@ -179,6 +179,22 @@ class GameServer:
                                 player["in_portal"] = bool(msg.get("in_portal", player["in_portal"]))
                                 player["portal_index"] = int(msg.get("portal_index", player["portal_index"]))
                                 player["dead"] = bool(msg.get("dead", player["dead"]))
+                    elif msg_type == "register_name" and player_id is not None:
+                        requested_name = str(msg.get("name", "")).strip()
+                        if not requested_name or requested_name.casefold() == "spieler":
+                            continue
+                        with self.lock:
+                            if self._name_taken_by_other_ip(requested_name, client_ip):
+                                self._send(conn, {"type": "error", "message": "name_taken"})
+                                continue
+                            fixed_name = self.bound_names.get(client_ip)
+                            if fixed_name is None:
+                                self.bound_names[client_ip] = requested_name
+                                fixed_name = requested_name
+                                self._save_bound_names()
+                            player = self.players.get(player_id)
+                            if player:
+                                player["name"] = fixed_name
                     elif msg_type == "shot" and player_id is not None:
                         with self.lock:
                             shot = {
