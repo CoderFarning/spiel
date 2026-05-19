@@ -238,6 +238,8 @@ class SurvivalGame(arcade.Window):
         self.player_name = ""
         self.name_confirmed = False
         self.menu_mode = "choice"
+        self.menu_ip_input = "127.0.0.1"
+        self.menu_focus_field = "name"
         self.lobby_wait_time = 10.0
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
@@ -309,6 +311,8 @@ class SurvivalGame(arcade.Window):
             self.player_name = ""
         self.name_confirmed = False
         self.menu_mode = "choice"
+        self.menu_ip_input = "127.0.0.1"
+        self.menu_focus_field = "name"
         self.state = "menu"
 
     # ---------------- SETUP ----------------
@@ -400,15 +404,31 @@ class SurvivalGame(arcade.Window):
                 self.admin_input = self.admin_input[:-1]
                 return
         if self.state == "menu":
-            if self.menu_mode != "login":
+            if self.menu_mode == "choice":
                 return
             if key == arcade.key.ENTER or key == arcade.key.RETURN:
+                if self.menu_mode == "guest":
+                    self.player_name = "Gast"
+                    self.name_confirmed = True
+                    self.setup_game()
+                    self.state = "lobby"
+                    self.lobby_timer = self.lobby_wait_time
+                    self.lobby_active_circle = -1
+                    return
                 if self.player_name.strip():
                     self.name_confirmed = True
+                    self.setup_game()
+                    self.state = "lobby"
+                    self.lobby_timer = self.lobby_wait_time
+                    self.lobby_active_circle = -1
                 return
             if key == arcade.key.BACKSPACE:
-                self.player_name = self.player_name[:-1]
-                self.name_confirmed = False
+                if self.menu_mode == "login":
+                    if self.menu_focus_field == "ip":
+                        self.menu_ip_input = self.menu_ip_input[:-1]
+                    else:
+                        self.player_name = self.player_name[:-1]
+                        self.name_confirmed = False
                 return
         if self.state == "game":
             if key == arcade.key.KEY_1:
@@ -525,29 +545,43 @@ class SurvivalGame(arcade.Window):
                 if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
                     self.menu_mode = "login"
                     self.name_confirmed = False
+                    self.menu_focus_field = "name"
                     return True
                 gx, gy, gw, gh = self.ui_rects["menu_guest"]
                 if self.point_in_rect(x, y, (gx, gy, gw, gh), padding=20):
+                    self.menu_mode = "guest"
+                    self.player_name = "Gast"
+                    return True
+                return True
+            if self.menu_mode == "login":
+                ip_rect = self.ui_rects["menu_ip_field"]
+                name_rect = self.ui_rects["menu_name_field"]
+                play_rect = self.ui_rects["menu_login_play"]
+                if self.point_in_rect(x, y, ip_rect, padding=12):
+                    self.menu_focus_field = "ip"
+                    return True
+                if self.point_in_rect(x, y, name_rect, padding=12):
+                    self.menu_focus_field = "name"
+                    return True
+                if self.point_in_rect(x, y, play_rect, padding=20):
                     if not self.player_name.strip():
-                        self.player_name = "Gast"
+                        return True
                     self.name_confirmed = True
                     self.setup_game()
                     self.state = "lobby"
                     self.lobby_timer = self.lobby_wait_time
                     self.lobby_active_circle = -1
                     return True
-                return True
-            bx, by, bw, bh = self.ui_rects["start_button"]
-            if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
-                if not self.name_confirmed and self.player_name.strip():
+            if self.menu_mode == "guest":
+                gbx, gby, gbw, gbh = self.ui_rects["menu_guest_play"]
+                if self.point_in_rect(x, y, (gbx, gby, gbw, gbh), padding=20):
+                    self.player_name = "Gast"
                     self.name_confirmed = True
-                if not self.name_confirmed or not self.player_name.strip():
+                    self.setup_game()
+                    self.state = "lobby"
+                    self.lobby_timer = self.lobby_wait_time
+                    self.lobby_active_circle = -1
                     return True
-                self.setup_game()
-                self.state = "lobby"
-                self.lobby_timer = self.lobby_wait_time
-                self.lobby_active_circle = -1
-                return True
             back = self.ui_rects.get("menu_back_choice", (0, 0, 0, 0))
             if self.point_in_rect(x, y, back, padding=20):
                 self.menu_mode = "choice"
@@ -668,14 +702,18 @@ class SurvivalGame(arcade.Window):
             if text and text.isprintable():
                 self.admin_input += text
         if self.state == "menu":
-            if self.menu_mode != "login":
+            if self.menu_mode == "choice":
                 return
             if self.name_confirmed:
                 return
             if text and text.isprintable():
-                if len(self.player_name) < 16:
-                    self.player_name += text
-                    self.name_confirmed = False
+                if self.menu_mode == "login" and self.menu_focus_field == "ip":
+                    if len(self.menu_ip_input) < 32:
+                        self.menu_ip_input += text
+                else:
+                    if len(self.player_name) < 16:
+                        self.player_name += text
+                        self.name_confirmed = False
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -819,6 +857,13 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["menu_login"] = (bx, by + 70, bw, bh)
         self.ui_rects["menu_guest"] = (bx, by - 70, bw, bh)
         self.ui_rects["menu_back_choice"] = (self.width / 2 - 120, self.height / 2 - 320, 240, 64)
+        field_w = 520
+        field_h = 60
+        field_x = self.width / 2 - field_w / 2
+        self.ui_rects["menu_ip_field"] = (field_x, self.height / 2 - 140, field_w, field_h)
+        self.ui_rects["menu_name_field"] = (field_x, self.height / 2 - 240, field_w, field_h)
+        self.ui_rects["menu_login_play"] = (self.width / 2 - 180, self.height / 2 - 20, 360, 90)
+        self.ui_rects["menu_guest_play"] = (self.width / 2 - 180, self.height / 2 - 30, 360, 90)
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
@@ -908,8 +953,10 @@ class SurvivalGame(arcade.Window):
         if self.state == "menu":
             if self.menu_mode == "choice":
                 active_keys = ["menu_login", "menu_guest"]
-            elif self.name_confirmed:
-                active_keys = ["start_button"]
+            elif self.menu_mode == "login":
+                active_keys = ["menu_login_play"]
+            elif self.menu_mode == "guest":
+                active_keys = ["menu_guest_play"]
         elif self.state == "game":
             active_keys = ["wave_button"]
             active_keys.extend(["upgrade_panel_window"])
@@ -1557,29 +1604,54 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
                 self.start_button = None
-            else:
-                bx, by, bw, bh = self.ui_rects["start_button"]
-                level = self.ease(self.hover_level.get("start_button", 0.0))
+            elif self.menu_mode == "login":
+                bx, by, bw, bh = self.ui_rects["menu_login_play"]
+                level = self.ease(self.hover_level.get("menu_login_play", 0.0))
                 start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
                 self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.22)
-                arcade.draw_text("START",
-                                 self.width//2, self.height//2,
+                arcade.draw_text("Spielen",
+                                 bx + bw/2, by + bh/2,
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
                 self.start_button = (bx, by, bw, bh)
-            # Name-Feld nur im Anmelden-Modus
-            if self.menu_mode == "login":
-                field_w = 520
-                field_h = 60
-                field_x = self.width/2 - field_w/2
-                field_y = self.height/2 - 200
-                arcade.draw_text("Name:", field_x, field_y + field_h + 10, arcade.color.WHITE, 24)
-                arcade.draw_lbwh_rectangle_outline(field_x, field_y, field_w, field_h, arcade.color.WHITE, border_width=3)
-                caret = "|" if self.caret_visible else ""
-                arcade.draw_text(self.player_name + caret,
-                                 field_x + 10, field_y + field_h/2,
+                ipx, ipy, ipw, iph = self.ui_rects["menu_ip_field"]
+                nx, ny, nw, nh = self.ui_rects["menu_name_field"]
+                arcade.draw_text("IP:", ipx, ipy + iph + 8, arcade.color.WHITE, 24)
+                arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
+                ip_border = arcade.color.GOLD if self.menu_focus_field == "ip" else arcade.color.WHITE
+                name_border = arcade.color.GOLD if self.menu_focus_field == "name" else arcade.color.WHITE
+                arcade.draw_lbwh_rectangle_outline(ipx, ipy, ipw, iph, ip_border, border_width=3)
+                arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
+                ip_caret = "|" if (self.caret_visible and self.menu_focus_field == "ip") else ""
+                name_caret = "|" if (self.caret_visible and self.menu_focus_field == "name") else ""
+                arcade.draw_text(self.menu_ip_input + ip_caret,
+                                 ipx + 10, ipy + iph/2,
                                  arcade.color.WHITE, 26,
                                  anchor_y="center")
+                arcade.draw_text(self.player_name + name_caret,
+                                 nx + 10, ny + nh/2,
+                                 arcade.color.WHITE, 26,
+                                 anchor_y="center")
+                bbx, bby, bbw, bbh = self.ui_rects["menu_back_choice"]
+                arcade.draw_lbwh_rectangle_filled(bbx, bby, bbw, bbh, arcade.color.DARK_RED)
+                arcade.draw_lbwh_rectangle_outline(bbx, bby, bbw, bbh, arcade.color.WHITE, 2)
+                arcade.draw_text("Zurück",
+                                 bbx + bbw/2, bby + bbh/2,
+                                 arcade.color.WHITE, 22,
+                                 anchor_x="center", anchor_y="center")
+            elif self.menu_mode == "guest":
+                gbx, gby, gbw, gbh = self.ui_rects["menu_guest_play"]
+                level = self.ease(self.hover_level.get("menu_guest_play", 0.0))
+                gcolor = self.lerp_color(arcade.color.DARK_SPRING_GREEN, arcade.color.SPRING_GREEN, level)
+                self.draw_scaled_rect(gbx, gby, gbw, gbh, gcolor, level, scale_factor=0.22)
+                arcade.draw_text("Spielen",
+                                 gbx + gbw/2, gby + gbh/2,
+                                 arcade.color.WHITE, 30,
+                                 anchor_x="center", anchor_y="center")
+                arcade.draw_text("Name: Gast",
+                                 self.width/2, gby + gbh + 40,
+                                 arcade.color.WHITE, 24,
+                                 anchor_x="center")
                 bbx, bby, bbw, bbh = self.ui_rects["menu_back_choice"]
                 arcade.draw_lbwh_rectangle_filled(bbx, bby, bbw, bbh, arcade.color.DARK_RED)
                 arcade.draw_lbwh_rectangle_outline(bbx, bby, bbw, bbh, arcade.color.WHITE, 2)

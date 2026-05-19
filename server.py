@@ -22,7 +22,6 @@ class GameServer:
         self.bullet_events = []
         self.names_file = Path(__file__).resolve().parent / "Namen.txt"
         self.bound_names = self._load_bound_names()
-        self.name_history = self._load_name_history()
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
@@ -77,38 +76,11 @@ class GameServer:
 
     def _save_bound_names(self):
         try:
-            # Persistiere die komplette Historie aller akzeptierten Namen+IPs.
-            lines = sorted(self.name_history)
+            # Persistiere nur angemeldete, feste Name<->IP-Bindungen.
+            lines = sorted(f"{name} {ip}" for ip, name in self.bound_names.items())
             self.names_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         except Exception:
             pass
-
-    def _append_name_entry(self, name: str, ip: str):
-        entry = f"{name} {ip}"
-        try:
-            with self.names_file.open("a", encoding="utf-8") as f:
-                f.write(entry + "\n")
-        except Exception:
-            pass
-
-    def _load_name_history(self):
-        result = set()
-        if not self.names_file.exists():
-            return result
-        try:
-            for raw in self.names_file.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if not line:
-                    continue
-                parts = line.rsplit(" ", 1)
-                if len(parts) != 2:
-                    continue
-                name, ip = parts[0].strip(), parts[1].strip()
-                if name and ip:
-                    result.add(f"{name} {ip}")
-        except Exception:
-            return set()
-        return result
 
     def _name_taken_by_other_ip(self, name: str, ip: str) -> bool:
         lname = name.casefold()
@@ -150,24 +122,34 @@ class GameServer:
                         requested_name = str(msg.get("name", "")).strip()
                         if requested_name.casefold() == "spieler":
                             requested_name = ""
+                        is_guest = bool(msg.get("guest", False)) or not requested_name
                         with self.lock:
                             fixed_name = self.bound_names.get(client_ip, "")
                             if not fixed_name:
-                                if not requested_name:
-                                    requested_name = f"User{self.next_id}"
-                                if self._name_taken_by_other_ip(requested_name, client_ip):
-                                    self._send(conn, {"type": "error", "message": "name_taken"})
-                                    try:
-                                        conn.close()
-                                    except Exception:
-                                        pass
-                                    return
-                                fixed_name = requested_name
-                                self.bound_names[client_ip] = fixed_name
-                            self.name_history.add(f"{fixed_name} {client_ip}")
-                            self._save_bound_names()
-                            # Zusätzlich sofort appenden, damit Eintrag direkt sichtbar ist.
-                            self._append_name_entry(fixed_name, client_ip)
+                                # Nur echte Anmeldung bindet Name an IP und schreibt Namen.txt.
+                                if is_guest:
+                                    fixed_name = requested_name if requested_name else f"Gast{self.next_id}"
+                                else:
+                                    if not requested_name:
+                                        self._send(conn, {"type": "error", "message": "name_required"})
+                                        try:
+                                            conn.close()
+                                        except Exception:
+                                            pass
+                                        return
+                                    if self._name_taken_by_other_ip(requested_name, client_ip):
+                                        self._send(conn, {"type": "error", "message": "name_taken"})
+                                        try:
+                                            conn.close()
+                                        except Exception:
+                                            pass
+                                        return
+                                    fixed_name = requested_name
+                                    self.bound_names[client_ip] = fixed_name
+                                    self._save_bound_names()
+                            elif is_guest:
+                                # Bereits registrierte IP bleibt immer auf festem Namen.
+                                pass
                             player_id = self.next_id
                             self.next_id += 1
                             self.clients[conn] = player_id
