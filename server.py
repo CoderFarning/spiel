@@ -2,8 +2,6 @@ import json
 import socket
 import threading
 import time
-import hashlib
-from pathlib import Path
 
 
 class GameServer:
@@ -21,10 +19,6 @@ class GameServer:
         self.portal_started_at = {0: None, 1: None, 2: None}
         self.next_bullet_id = 1
         self.bullet_events = []
-        self.names_file = Path(__file__).resolve().parent / "Namen.txt"
-        self.accounts_file = Path(__file__).resolve().parent / "Konten.txt"
-        self.bound_names = self._load_bound_names()
-        self.accounts = self._load_accounts()
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
@@ -58,76 +52,11 @@ class GameServer:
         data = (json.dumps(payload) + "\n").encode("utf-8")
         conn.sendall(data)
 
-    def _load_bound_names(self):
-        result = {}
-        if not self.names_file.exists():
-            return result
-        try:
-            for raw in self.names_file.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if not line:
-                    continue
-                parts = line.rsplit(" ", 1)
-                if len(parts) != 2:
-                    continue
-                name, ip = parts[0].strip(), parts[1].strip()
-                if name and ip:
-                    result[ip] = name
-        except Exception:
-            return {}
-        return result
-
-    def _save_bound_names(self):
-        try:
-            # Persistiere feste Name<->IP-Bindungen plus Passwort-Hash (falls Konto vorhanden).
-            lines = []
-            for ip, name in sorted(self.bound_names.items()):
-                acc = self.accounts.get(ip)
-                if acc and acc.get("password_hash"):
-                    lines.append(f"{name} {ip} {acc['password_hash']}")
-                else:
-                    lines.append(f"{name} {ip}")
-            self.names_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        except Exception:
-            pass
-
-    def _name_taken_by_other_ip(self, name: str, ip: str) -> bool:
-        lname = name.casefold()
-        for existing_ip, existing_name in self.bound_names.items():
-            if existing_ip != ip and existing_name.casefold() == lname:
-                return True
-        return False
-
-    def _hash_password(self, password: str) -> str:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-    def _load_accounts(self):
-        result = {}
-        if not self.accounts_file.exists():
-            return result
-        try:
-            for raw in self.accounts_file.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if not line:
-                    continue
-                parts = line.split(" ")
-                if len(parts) != 3:
-                    continue
-                name, ip, pwd_hash = parts
-                if name and ip and pwd_hash:
-                    result[ip] = {"name": name, "password_hash": pwd_hash}
-        except Exception:
-            return {}
-        return result
-
-    def _save_accounts(self):
-        try:
-            lines = []
-            for ip, entry in sorted(self.accounts.items()):
-                lines.append(f"{entry['name']} {ip} {entry['password_hash']}")
-            self.accounts_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        except Exception:
-            pass
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        cleaned = "".join(ch for ch in str(name) if ch.isprintable() and ch not in "\r\n\t")
+        cleaned = " ".join(cleaned.strip().split())
+        return cleaned[:24]
 
     def _handle_client(self, conn, addr):
         conn.settimeout(0.5)
@@ -159,37 +88,11 @@ class GameServer:
                             except Exception:
                                 pass
                             return
-                        requested_name = str(msg.get("name", "")).strip()
+                        requested_name = self._normalize_name(msg.get("name", ""))
                         if requested_name.casefold() == "spieler":
                             requested_name = ""
-                        is_guest = bool(msg.get("guest", False)) or not requested_name
                         with self.lock:
-                            fixed_name = self.bound_names.get(client_ip, "")
-                            if not fixed_name:
-                                # Nur echte Anmeldung bindet Name an IP und schreibt Namen.txt.
-                                if is_guest:
-                                    fixed_name = requested_name if requested_name else f"Gast{self.next_id}"
-                                else:
-                                    if not requested_name:
-                                        self._send(conn, {"type": "error", "message": "name_required"})
-                                        try:
-                                            conn.close()
-                                        except Exception:
-                                            pass
-                                        return
-                                    if self._name_taken_by_other_ip(requested_name, client_ip):
-                                        self._send(conn, {"type": "error", "message": "name_taken"})
-                                        try:
-                                            conn.close()
-                                        except Exception:
-                                            pass
-                                        return
-                                    fixed_name = requested_name
-                                    self.bound_names[client_ip] = fixed_name
-                                    self._save_bound_names()
-                            elif is_guest:
-                                # Bereits registrierte IP bleibt immer auf festem Namen.
-                                pass
+                            fixed_name = requested_name if requested_name else "Spieler"
                             player_id = self.next_id
                             self.next_id += 1
                             self.clients[conn] = player_id
@@ -219,64 +122,12 @@ class GameServer:
                                 player["in_portal"] = bool(msg.get("in_portal", player["in_portal"]))
                                 player["portal_index"] = int(msg.get("portal_index", player["portal_index"]))
                                 player["dead"] = bool(msg.get("dead", player["dead"]))
-                    elif msg_type == "register_name" and player_id is not None:
-                        requested_name = str(msg.get("name", "")).strip()
-                        if not requested_name or requested_name.casefold() == "spieler":
-                            continue
+                    elif msg_type == "set_name" and player_id is not None:
+                        requested_name = self._normalize_name(msg.get("name", ""))
                         with self.lock:
-                            if self._name_taken_by_other_ip(requested_name, client_ip):
-                                self._send(conn, {"type": "error", "message": "name_taken"})
-                                continue
-                            fixed_name = self.bound_names.get(client_ip)
-                            if fixed_name is None:
-                                self.bound_names[client_ip] = requested_name
-                                fixed_name = requested_name
-                                self._save_bound_names()
                             player = self.players.get(player_id)
                             if player:
-                                player["name"] = fixed_name
-                    elif msg_type == "auth" and player_id is not None:
-                        mode = str(msg.get("mode", "")).strip().lower()
-                        name = str(msg.get("name", "")).strip()
-                        password = str(msg.get("password", "")).strip()
-                        if not name or not password:
-                            self._send(conn, {"type": "error", "message": "auth_invalid"})
-                            continue
-                        with self.lock:
-                            if mode == "register":
-                                if client_ip in self.accounts:
-                                    self._send(conn, {"type": "error", "message": "account_exists"})
-                                    continue
-                                if self._name_taken_by_other_ip(name, client_ip):
-                                    self._send(conn, {"type": "error", "message": "name_taken"})
-                                    continue
-                                self.accounts[client_ip] = {
-                                    "name": name,
-                                    "password_hash": self._hash_password(password),
-                                }
-                                self.bound_names[client_ip] = name
-                                self._save_accounts()
-                                self._save_bound_names()
-                                player = self.players.get(player_id)
-                                if player:
-                                    player["name"] = name
-                                self._send(conn, {"type": "auth_ok", "name": name, "mode": "register"})
-                            elif mode == "login":
-                                acc = self.accounts.get(client_ip)
-                                if not acc:
-                                    self._send(conn, {"type": "error", "message": "account_missing"})
-                                    continue
-                                if acc["password_hash"] != self._hash_password(password):
-                                    self._send(conn, {"type": "error", "message": "auth_failed"})
-                                    continue
-                                self.bound_names[client_ip] = acc["name"]
-                                self._save_bound_names()
-                                player = self.players.get(player_id)
-                                if player:
-                                    player["name"] = acc["name"]
-                                self._send(conn, {"type": "auth_ok", "name": acc["name"], "mode": "login"})
-                            else:
-                                self._send(conn, {"type": "error", "message": "auth_mode_invalid"})
+                                player["name"] = requested_name if requested_name else "Spieler"
                     elif msg_type == "shot" and player_id is not None:
                         with self.lock:
                             shot = {
@@ -291,13 +142,6 @@ class GameServer:
                             }
                             self.next_bullet_id += 1
                             self.bullet_events.append(shot)
-                    elif msg_type == "revive" and player_id is not None:
-                        with self.lock:
-                            target_id = int(msg.get("target_id", -1))
-                            target = self.players.get(target_id)
-                            if target:
-                                target["dead"] = False
-                                target["health"] = max(1.0, float(target.get("health", 1.0)))
         except Exception:
             pass
         finally:

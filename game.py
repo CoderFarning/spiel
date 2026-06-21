@@ -34,6 +34,8 @@ SHOT_RADIUS = 500
 PORTAL_COOLDOWN = 0.4
 AMMO_COST = 2
 SPAWN_PREVIEW_DURATION = 1.0
+SMOKE_BORDER_THICKNESS = 160
+SMOKE_DAMAGE_PER_SECOND = 5.0
 
 
 class OnlineClient:
@@ -48,8 +50,6 @@ class OnlineClient:
         self._lock = threading.Lock()
         self._snapshot = {}
         self.last_error = ""
-        self.auth_ok = False
-        self.auth_name = ""
         self._running = False
         self._recv_thread = None
 
@@ -102,21 +102,10 @@ class OnlineClient:
             return
         self._send({"type": "shot", "x": x, "y": y, "vx": vx, "vy": vy, "ttl": ttl})
 
-    def send_revive(self, target_id: int):
+    def send_name(self, name: str):
         if not self.connected:
             return
-        self._send({"type": "revive", "target_id": target_id})
-
-    def send_register_name(self, name: str):
-        if not self.connected:
-            return
-        self._send({"type": "register_name", "name": name})
-
-    def send_auth(self, mode: str, name: str, password: str):
-        if not self.connected:
-            return
-        self.auth_ok = False
-        self._send({"type": "auth", "mode": mode, "name": name, "password": password})
+        self._send({"type": "set_name", "name": name})
 
     def _recv_loop(self):
         buffer = ""
@@ -143,9 +132,6 @@ class OnlineClient:
                         except Exception:
                             pass
                         break
-                    elif msg.get("type") == "auth_ok":
-                        self.auth_ok = True
-                        self.auth_name = str(msg.get("name", ""))
                     elif msg.get("type") == "snapshot":
                         with self._lock:
                             self._snapshot = msg
@@ -170,7 +156,7 @@ class Enemy(arcade.Sprite):
         self.gem_reward = 10
         self.touch_damage = 10
         self.final_texture = None
-        self.final_scale = 0.3
+        self.final_scale = 0.25
         self.is_dying = False
         self.death_timer = 0.0
         self.is_spawning = False
@@ -215,8 +201,6 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
-        self.bandage_message = ""
-        self.bandage_message_timer = 0.0
         self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
@@ -225,11 +209,10 @@ class SurvivalGame(arcade.Window):
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
         self.gems = 50
-        self.bandages = 0
         self.total_enemy_kills = 0
         self.mouse_x = 0
         self.mouse_y = 0
-        self._pending_release_dedupe = None
+        self.last_menu_click_handled_at = 0.0
         self.admin_focus = False
         self.admin_message = ""
         self.admin_message_timer = 0.0
@@ -241,7 +224,6 @@ class SurvivalGame(arcade.Window):
         self.text_cache = {}
         self.auto_shot_owned = False
         self.auto_shot_cooldown = 0.0
-        self.auto_shot_waves_left = 0
         self.weapon_shot_cooldown = 0.0
         self.weapon_hold_timer = 0.0
         self.mouse_hold_initial_delay = 0.18
@@ -251,13 +233,12 @@ class SurvivalGame(arcade.Window):
         self.wave_auto_timer = 5.0
         self.player_health_max = 200
         self.player_damage_cooldown = 0.0
+        self.smoke_damage_acc = 0.0
+        self.health_upgrade_count = 0
         self.player_name = ""
         self.name_confirmed = False
-        self.menu_mode = "choice"
-        self.menu_ip_input = "127.0.0.1"
+        self.menu_mode = "name"
         self.menu_focus_field = "name"
-        self.menu_password_input = ""
-        self.menu_auth_action = "register"
         self.lobby_wait_time = 10.0
         self.lobby_timer = self.lobby_wait_time
         self.lobby_active_circle = -1
@@ -272,6 +253,7 @@ class SurvivalGame(arcade.Window):
         self.spawn_hole2_texture = arcade.load_texture(str(IMG_DIR / "loch2.png"))
         self.spawn_hole3_texture = arcade.load_texture(str(IMG_DIR / "loch3.png"))
         self.teleporter_texture = arcade.load_texture(str(IMG_DIR / "teleporter.png"))
+        self.smoke_texture = arcade.load_texture(str(IMG_DIR / "Rauch.png"))
         self.player_texture_armed = arcade.load_texture(str(IMG_DIR / "spieler.png"))
         self.player_texture_unarmed = arcade.load_texture(str(IMG_DIR / "spielerB.png"))
         self.remote_player_texture = arcade.load_texture(str(IMG_DIR / "spieler.png"))
@@ -283,7 +265,7 @@ class SurvivalGame(arcade.Window):
         self.upgrade_icon_sprite = arcade.Sprite(str(IMG_DIR / "pistole.png"), scale=0.7)
         self.upgrade_icon_list = arcade.SpriteList()
         self.upgrade_icon_list.append(self.upgrade_icon_sprite)
-        self.weapon_equipped = False  # Start: Waffe abgerüstet
+        self.weapon_equipped = True
         self.wave_auto_timer = 5.0
         self.house_upgrades_on = False
 
@@ -328,46 +310,9 @@ class SurvivalGame(arcade.Window):
         if self.player_name.strip().lower() == "spieler":
             self.player_name = ""
         self.name_confirmed = False
-        self.menu_mode = "choice"
-        self.menu_ip_input = "127.0.0.1"
+        self.menu_mode = "name"
         self.menu_focus_field = "name"
-        self.menu_password_input = ""
-        self.menu_auth_action = "register"
         self.state = "menu"
-
-    def reset_start_menu_state(self):
-        self.menu_mode = "choice"
-        self.menu_ip_input = "127.0.0.1"
-        self.menu_focus_field = "name"
-        self.menu_password_input = ""
-        self.player_name = ""
-        self.name_confirmed = False
-
-    def persist_login_name_local(self, name: str):
-        clean_name = name.strip()
-        if not clean_name:
-            return
-        ip = self.menu_ip_input.strip() if self.menu_ip_input.strip() else "127.0.0.1"
-        names_path = Path(__file__).resolve().parent / "Namen.txt"
-        try:
-            existing = {}
-            if names_path.exists():
-                for raw in names_path.read_text(encoding="utf-8").splitlines():
-                    line = raw.strip()
-                    if not line:
-                        continue
-                    parts = line.rsplit(" ", 1)
-                    if len(parts) != 2:
-                        continue
-                    n, p = parts[0].strip(), parts[1].strip()
-                    if n and p:
-                        existing[p] = n
-            if ip not in existing:
-                existing[ip] = clean_name
-            lines = [f"{n} {p}" for p, n in sorted(existing.items())]
-            names_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        except Exception:
-            pass
 
     # ---------------- SETUP ----------------
     def setup_game(self):
@@ -379,10 +324,10 @@ class SurvivalGame(arcade.Window):
 
         self.house_sprite = None
 
-        self.weapon_equipped = False
+        self.weapon_equipped = True
         self.player = arcade.Sprite(str(IMG_DIR / "spielerB.png"), scale=self.player_scale_unarmed)
         self.player.center_x = 0
-        self.player.center_y = -LOBBY_HEIGHT / 2 + 40
+        self.player.center_y = 0
         self.player_list.append(self.player)
         self.prev_player_pos = (self.player.center_x, self.player.center_y)
         self.isch_sprite = None
@@ -394,6 +339,8 @@ class SurvivalGame(arcade.Window):
 
         self.player_health = self.player_health_max
         self.player_damage_cooldown = 0.0
+        self.smoke_damage_acc = 0.0
+        self.health_upgrade_count = 0
         self.shots_left = float("inf")
         self.energy = 100.0
         self.sprint_drain_acc = 0.0
@@ -423,14 +370,11 @@ class SurvivalGame(arcade.Window):
         self.show_minimap = False
         self.wave_message = ""
         self.wave_message_timer = 0.0
-        self.bandage_message = ""
-        self.bandage_message_timer = 0.0
         self.controls_hint_timer = 0.0
         self.wave_kills = 0
         self.wave_lives_lost = 0
         self.wave_reward_coins = 0
         self.total_coins = 0
-        self.bandages = 0
         self.total_enemy_kills = 0
         self.portal_cooldown_timer = 0.0
         self.ui_rects = {}
@@ -458,21 +402,12 @@ class SurvivalGame(arcade.Window):
                 self.admin_input = self.admin_input[:-1]
                 return
         if self.state == "menu":
-            if self.menu_mode == "choice":
-                return
             if key == arcade.key.ENTER or key == arcade.key.RETURN:
-                # Im Startmenü nie per Enter fortfahren:
-                # nur Button-Klicks sollen starten.
+                self._submit_name_and_start()
                 return
             if key == arcade.key.BACKSPACE:
-                if self.menu_mode in ("login", "guest"):
-                    if self.menu_focus_field == "ip":
-                        self.menu_ip_input = self.menu_ip_input[:-1]
-                    elif self.menu_focus_field == "password":
-                        self.menu_password_input = self.menu_password_input[:-1]
-                    else:
-                        self.player_name = self.player_name[:-1]
-                        self.name_confirmed = False
+                self.player_name = self.player_name[:-1]
+                self.name_confirmed = False
                 return
         if self.state == "game":
             if key == arcade.key.KEY_1:
@@ -537,6 +472,10 @@ class SurvivalGame(arcade.Window):
             return costs[self.weapon_level - 1]
         return None
 
+    def get_health_upgrade_cost(self):
+        base_cost = 200
+        return int(round(base_cost * (1.35 ** self.health_upgrade_count)))
+
     def get_weapon_cooldown(self):
         if self.weapon_level == 1:
             return 0.5
@@ -566,7 +505,7 @@ class SurvivalGame(arcade.Window):
             return "AK-47"
         if self.weapon_level == 4:
             return "Minigun"
-        return "Minigun"   
+        return "Minigun"
 
     def get_next_weapon_name(self):
         if self.weapon_level == 1:
@@ -584,61 +523,16 @@ class SurvivalGame(arcade.Window):
         self.mouse_y = y
 
         if self.state == "menu":
-            if self.menu_mode == "choice":
-                bx, by, bw, bh = self.ui_rects["menu_login"]
-                if self.point_in_rect(x, y, (bx, by, bw, bh), padding=80):
-                    self.menu_mode = "login"
-                    self.menu_auth_action = "register"
-                    self.name_confirmed = False
-                    self.menu_focus_field = "name"
-                    return True
-                gx, gy, gw, gh = self.ui_rects["menu_guest"]
-                if self.point_in_rect(x, y, (gx, gy, gw, gh), padding=80):
-                    self.menu_mode = "guest"
-                    self.menu_auth_action = "login"
-                    self.menu_focus_field = "password"
-                    return True
+            name_rect = self.ui_rects["menu_name_field"]
+            play_rect = self.ui_rects["menu_login_play"]
+            if self.point_in_rect(x, y, play_rect, padding=80):
+                self._submit_name_and_start()
                 return True
-            if self.menu_mode in ("login", "guest"):
-                ip_rect = self.ui_rects["menu_ip_field"]
-                name_rect = self.ui_rects["menu_name_field"]
-                pass_rect = self.ui_rects["menu_pass_field"]
-                play_rect = self.ui_rects["menu_login_play"]
-                if self.point_in_rect(x, y, play_rect, padding=80):
-                    if self.menu_auth_action == "register":
-                        if not self.player_name.strip() or not self.menu_password_input.strip():
-                            return True
-                    else:
-                        if not self.menu_password_input.strip():
-                            return True
-                        self.player_name = ""
-                    if self.menu_auth_action == "register":
-                        self.persist_login_name_local(self.player_name.strip())
-                    if self.online_client and self.online_client.connected:
-                        auth_name = self.player_name.strip() if self.menu_auth_action == "register" else ""
-                        self.online_client.send_auth(
-                            self.menu_auth_action,
-                            auth_name,
-                            self.menu_password_input.strip(),
-                        )
-                        if self.menu_auth_action == "register":
-                            self.online_client.send_register_name(self.player_name.strip())
-                    self.name_confirmed = True
-                    self.setup_game()
-                    self.state = "lobby"
-                    self.lobby_timer = self.lobby_wait_time
-                    self.lobby_active_circle = -1
-                    return True
-                if self.menu_auth_action == "register":
-                    if self.point_in_rect(x, y, ip_rect, padding=30):
-                        self.menu_focus_field = "ip"
-                        return True
-                    if self.point_in_rect(x, y, name_rect, padding=30):
-                        self.menu_focus_field = "name"
-                        return True
-                if self.point_in_rect(x, y, pass_rect, padding=30):
-                    self.menu_focus_field = "password"
-                    return True
+            if self.point_in_rect(x, y, name_rect, padding=30):
+                self.menu_focus_field = "name"
+                return True
+            return True
+
         elif self.state == "lobby":
             bx, by, bw, bh = self.ui_rects.get("lobby_leave", (0, 0, 0, 0))
             if self.lobby_active_circle >= 0 and self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
@@ -651,34 +545,30 @@ class SurvivalGame(arcade.Window):
 
         elif self.state == "game":
             if self.is_downed:
-                if self.respawn_timer <= 0:
-                    bx, by, bw, bh = self.ui_rects.get("downed_respawn", (0, 0, 0, 0))
-                    if self.point_in_rect(x, y, (bx, by, bw, bh), padding=20):
-                        self.is_downed = False
-                        self.player_health = self.player_health_max
-                        self.respawn_timer = 0.0
-                        return True
                 return True
 
-            bx, by, bw, bh = self.ui_rects["upgrade_panel_window"]
             weapon_cost = self.get_weapon_upgrade_cost()
-            if self.point_in_rect(x, y, (bx, by, bw, bh)):
+            weapon_rect = self.ui_rects["upgrade_panel_weapon"]
+            health_rect = self.ui_rects["upgrade_panel_health"]
+            auto_rect = self.ui_rects["upgrade_panel_auto"]
+            if self.point_in_rect(x, y, weapon_rect):
                 if weapon_cost is not None and self.gems >= weapon_cost:
                     self.gems -= weapon_cost
                     self.weapon_level += 1
                     self.weapon_upgraded = self.weapon_level > 1
                 return True
+            if self.point_in_rect(x, y, health_rect):
+                health_cost = self.get_health_upgrade_cost()
+                if self.gems >= health_cost:
+                    self.buy_health_upgrade()
+                return True
+            if self.point_in_rect(x, y, auto_rect):
+                self.buy_auto_shot()
+                return True
+            if self.point_in_rect(x, y, self.ui_rects["upgrade_panel_window"]):
+                return True
 
             if button == arcade.MOUSE_BUTTON_LEFT:
-                if self.online_client and self.bandages > 0:
-                    wx, wy = self.screen_to_world(x, y)
-                    for ghost in self.remote_players:
-                        if not getattr(ghost, "dead", False):
-                            continue
-                        if math.hypot(ghost.center_x - wx, ghost.center_y - wy) <= 90:
-                            self.bandages -= 1
-                            self.online_client.send_revive(int(getattr(ghost, "id", -1)))
-                            return True
                 self.fire_bullet(x, y)
                 return True
 
@@ -736,17 +626,17 @@ class SurvivalGame(arcade.Window):
             # Beim ersten Klick sofort einmal auslösen; Hold-Fire startet erst
             # nach kurzer Verzögerung, damit kein ungewollter Doppel-Schuss entsteht.
             handled = self._handle_click(x, y, button)
+            if handled and self.state == "menu":
+                self.last_menu_click_handled_at = time.time()
             if handled and self.state == "game":
                 self.weapon_hold_timer = max(self.weapon_hold_timer, self.mouse_hold_initial_delay)
             return handled
         return self._handle_click(x, y, button)
 
     def on_mouse_release(self, x, y, button, modifiers):
-        # Klicks werden bewusst nur auf mouse_press verarbeitet,
-        # damit niemals ein zweiter Ausloeser aus mouse_release entsteht.
+        # Klicks nur auf mouse_press verarbeiten: kein zweiter Auslöser.
         if button == arcade.MOUSE_BUTTON_LEFT:
             self.mouse_left_down = False
-        self._pending_release_dedupe = None
         return True
 
     def on_text(self, text: str):
@@ -754,21 +644,12 @@ class SurvivalGame(arcade.Window):
             if text and text.isprintable():
                 self.admin_input += text
         if self.state == "menu":
-            if self.menu_mode == "choice":
-                return
             if self.name_confirmed:
                 return
             if text and text.isprintable():
-                if self.menu_mode == "login" and self.menu_focus_field == "ip":
-                    if len(self.menu_ip_input) < 32:
-                        self.menu_ip_input += text
-                elif self.menu_focus_field == "password":
-                    if len(self.menu_password_input) < 24:
-                        self.menu_password_input += text
-                else:
-                    if len(self.player_name) < 16:
-                        self.player_name += text
-                        self.name_confirmed = False
+                if len(self.player_name) < 16:
+                    self.player_name += text
+                    self.name_confirmed = False
 
     # ---------------- RADIUS SHOT ----------------
     def radius_shot(self):
@@ -837,12 +718,20 @@ class SurvivalGame(arcade.Window):
         self.compute_shop_rects()
 
     def buy_auto_shot(self):
-        if self.auto_shot_owned or self.gems < 300:
+        if self.auto_shot_owned or self.gems < 500:
             return
-        self.gems -= 300
+        self.gems -= 500
         self.auto_shot_owned = True
-        self.auto_shot_waves_left = 2
         self.auto_shot_cooldown = 0.0
+
+    def buy_health_upgrade(self):
+        cost = self.get_health_upgrade_cost()
+        if self.gems < cost:
+            return
+        self.gems -= cost
+        self.health_upgrade_count += 1
+        self.player_health_max += 20
+        self.player_health = min(self.player_health_max, self.player_health + 20)
 
     def start_bg(self):
         return
@@ -909,17 +798,11 @@ class SurvivalGame(arcade.Window):
         bx = self.width // 2 - bw // 2
         by = self.height // 2 - bh // 2
         self.ui_rects["start_button"] = (bx, by, bw, bh)
-        self.ui_rects["menu_login"] = (bx, by + 70, bw, bh)
-        self.ui_rects["menu_guest"] = (bx, by - 70, bw, bh)
-        self.ui_rects["menu_back_choice"] = (0, 0, 0, 0)
         field_w = 520
         field_h = 60
         field_x = self.width / 2 - field_w / 2
-        self.ui_rects["menu_ip_field"] = (field_x, self.height / 2 - 140, field_w, field_h)
-        self.ui_rects["menu_name_field"] = (field_x, self.height / 2 - 240, field_w, field_h)
-        self.ui_rects["menu_pass_field"] = (field_x, self.height / 2 - 340, field_w, field_h)
+        self.ui_rects["menu_name_field"] = (field_x, self.height / 2 - 140, field_w, field_h)
         self.ui_rects["menu_login_play"] = (self.width / 2 - 180, self.height / 2 - 20, 360, 90)
-        self.ui_rects["menu_guest_play"] = (0, 0, 0, 0)
 
         # Game
         self.ui_rects["wave_button"] = self.get_wave_button_rect()
@@ -928,13 +811,17 @@ class SurvivalGame(arcade.Window):
         panel_x = 20
         panel_y = self.height - 240
         panel_w = 340
-        panel_h = 120
+        panel_h = 250
         box_h = 58
         inner_x = panel_x + 14
         inner_w = panel_w - 28
-        weapon_box_y = panel_y + 16
+        weapon_box_y = panel_y + 160
+        health_box_y = panel_y + 96
+        auto_box_y = panel_y + 32
         self.ui_rects["upgrade_panel_window"] = (panel_x, panel_y, panel_w, panel_h)
         self.ui_rects["upgrade_panel_weapon"] = (inner_x, weapon_box_y, inner_w, box_h)
+        self.ui_rects["upgrade_panel_health"] = (inner_x, health_box_y, inner_w, box_h)
+        self.ui_rects["upgrade_panel_auto"] = (inner_x, auto_box_y, inner_w, box_h)
         self.ui_rects["upgrade_panel_targeter"] = (0, 0, 0, 0)
         # Settings deaktiviert, aber KeyError vermeiden
         self.ui_rects["settings_button"] = (0, 0, 0, 0)
@@ -1007,13 +894,10 @@ class SurvivalGame(arcade.Window):
     def update_hover_levels(self, delta_time: float):
         active_keys = []
         if self.state == "menu":
-            if self.menu_mode == "choice":
-                active_keys = ["menu_login", "menu_guest"]
-            elif self.menu_mode in ("login", "guest"):
-                active_keys = ["menu_login_play"]
+            active_keys = ["menu_name_field", "menu_login_play"]
         elif self.state == "game":
             active_keys = ["wave_button"]
-            active_keys.extend(["upgrade_panel_window"])
+            active_keys.extend(["upgrade_panel_window", "upgrade_panel_weapon", "upgrade_panel_health", "upgrade_panel_auto"])
         elif self.state == "settings":
             active_keys = []
         elif self.state == "shop":
@@ -1089,13 +973,6 @@ class SurvivalGame(arcade.Window):
             targets.append(remote)
         return targets
 
-    def heal_dead_players_with_bandage(self):
-        # Multiplayer-ready placeholder: can be extended once multiple player
-        # entities and death states are available.
-        if self.bandages <= 0:
-            return False
-        return False
-
     def start_wave(self):
         if self.wave_active:
             return
@@ -1122,9 +999,6 @@ class SurvivalGame(arcade.Window):
         self.stop_prep()
         self.start_bg()
         self.wave_auto_timer = 5.0
-        if self.auto_shot_owned and self.auto_shot_waves_left <= 0:
-            self.auto_shot_owned = False
-
     def fire_bullet_towards(self, target_x, target_y, apply_cooldown=True):
         if not self.weapon_equipped:
             return False
@@ -1190,11 +1064,6 @@ class SurvivalGame(arcade.Window):
             self.admin_message_timer -= delta_time
             if self.admin_message_timer <= 0:
                 self.admin_message = ""
-        if self.bandage_message_timer > 0:
-            self.bandage_message_timer -= delta_time
-            if self.bandage_message_timer <= 0:
-                self.bandage_message_timer = 0.0
-                self.bandage_message = ""
 
         # Caret blink
         if self.admin_focus:
@@ -1322,11 +1191,19 @@ class SurvivalGame(arcade.Window):
                 self.player.center_x = cx
                 self.player.center_y = cy
                 portal_info = self.remote_portals.get(str(self.lobby_active_circle), self.remote_portals.get(self.lobby_active_circle, {}))
-                shared_remaining = float(portal_info.get("remaining", self.lobby_timer))
-                self.lobby_timer = shared_remaining
-                ready = bool(portal_info.get("ready", False)) or shared_remaining <= 0
+                # Servermodus: Countdown aus Snapshot.
+                # Offline/kein Snapshot: lokaler Fallback-Countdown.
+                if portal_info:
+                    shared_remaining = float(portal_info.get("remaining", self.lobby_timer))
+                    self.lobby_timer = shared_remaining
+                    ready = bool(portal_info.get("ready", False)) or shared_remaining <= 0
+                else:
+                    self.lobby_timer = max(0.0, self.lobby_timer - delta_time)
+                    ready = self.lobby_timer <= 0
                 if ready:
                     self.state = "game"
+                    self.player.center_x = 0
+                    self.player.center_y = 0
                     self.start_prep()
                     self.lobby_timer = self.lobby_wait_time
                     self.lobby_active_circle = -1
@@ -1372,18 +1249,20 @@ class SurvivalGame(arcade.Window):
 
         # Auto-Schuss auslösen, falls gekauft
         if self.auto_shot_owned and self.wave_active and self.auto_shot_cooldown <= 0:
-            target_enemy = None
-            target_dist = None
-            for enemy in self.enemies:
-                if enemy.is_dying or enemy.is_spawning:
-                    continue
-                dist = arcade.get_distance_between_sprites(self.player, enemy)
-                if dist <= SHOT_RADIUS and (target_dist is None or dist < target_dist):
-                    target_dist = dist
-                    target_enemy = enemy
-            if target_enemy is not None:
-                self.fire_bullet_towards(target_enemy.center_x, target_enemy.center_y, apply_cooldown=False)
-                self.auto_shot_cooldown = 0.4
+            moving_now = abs(self.player.change_x) > 0.01 or abs(self.player.change_y) > 0.01
+            if not moving_now:
+                target_enemy = None
+                target_dist = None
+                for enemy in self.enemies:
+                    if enemy.is_dying or enemy.is_spawning:
+                        continue
+                    dist = arcade.get_distance_between_sprites(self.player, enemy)
+                    if dist <= SHOT_RADIUS and (target_dist is None or dist < target_dist):
+                        target_dist = dist
+                        target_enemy = enemy
+                if target_enemy is not None:
+                    self.fire_bullet_towards(target_enemy.center_x, target_enemy.center_y, apply_cooldown=False)
+                    self.auto_shot_cooldown = 0.4
 
         # Gedrueckt halten = kontinuierlich schiessen (Cooldown der Waffe bleibt aktiv).
         if self.mouse_left_down and self.weapon_hold_timer <= 0:
@@ -1425,10 +1304,6 @@ class SurvivalGame(arcade.Window):
                 bullet.kill()
                 self.wave_kills += 1
                 self.total_enemy_kills += 1
-                if self.total_enemy_kills % 20 == 0:
-                    self.bandages += 1
-                    self.bandage_message = "Bandage Erhallten"
-                    self.bandage_message_timer = 2.0
                 self.gems += enemy.gem_reward
                 break
 
@@ -1455,6 +1330,27 @@ class SurvivalGame(arcade.Window):
 
         self.player.center_x += self.player.change_x * delta_time
         self.player.center_y += self.player.change_y * delta_time
+
+        if self.wave_number >= 5:
+            smoke_left = -MAP_WIDTH / 2 + SMOKE_BORDER_THICKNESS
+            smoke_right = MAP_WIDTH / 2 - SMOKE_BORDER_THICKNESS
+            smoke_bottom = -MAP_HEIGHT / 2 + SMOKE_BORDER_THICKNESS
+            smoke_top = MAP_HEIGHT / 2 - SMOKE_BORDER_THICKNESS
+            in_smoke = (
+                self.player.center_x <= smoke_left or
+                self.player.center_x >= smoke_right or
+                self.player.center_y <= smoke_bottom or
+                self.player.center_y >= smoke_top
+            )
+            if in_smoke:
+                self.smoke_damage_acc += SMOKE_DAMAGE_PER_SECOND * delta_time
+                while self.smoke_damage_acc >= 1.0 and self.player_health > 0:
+                    self.player_health = max(0, self.player_health - 1)
+                    self.smoke_damage_acc -= 1.0
+            else:
+                self.smoke_damage_acc = 0.0
+        else:
+            self.smoke_damage_acc = 0.0
 
         moving = self.player.change_x != 0 or self.player.change_y != 0
         self.sprint_drain_acc = 0.0
@@ -1511,10 +1407,6 @@ class SurvivalGame(arcade.Window):
                 self.wave_message_timer = 3.0
                 self.wave_reward_coins = self.wave_kills - self.wave_lives_lost + (self.wave_number * 10)
                 self.total_coins += self.wave_reward_coins
-                if self.auto_shot_owned and self.auto_shot_waves_left > 0:
-                    self.auto_shot_waves_left -= 1
-                    if self.auto_shot_waves_left <= 0:
-                        self.auto_shot_owned = False
 
         # Enemy Update
         for enemy in self.enemies:
@@ -1605,7 +1497,7 @@ class SurvivalGame(arcade.Window):
                 touch_damage = 10
 
             enemy = Enemy(spawn_texture)
-            enemy.scale = 0.3
+            enemy.scale = 0.25
             enemy.base_speed = base_speed
             enemy.hit_points = hit_points
             enemy.max_hit_points = hit_points
@@ -1613,7 +1505,7 @@ class SurvivalGame(arcade.Window):
             enemy.gem_reward = gem_reward
             enemy.touch_damage = touch_damage
             enemy.final_texture = final_texture
-            enemy.final_scale = 0.3
+            enemy.final_scale = 0.25
             enemy.is_spawning = True
             enemy.spawn_timer = SPAWN_PREVIEW_DURATION
             for _attempt in range(24):
@@ -1668,36 +1560,29 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.WHITE, 30,
                                  anchor_x="center", anchor_y="center")
                 self.start_button = (bx, by, bw, bh)
-                ipx, ipy, ipw, iph = self.ui_rects["menu_ip_field"]
+            if self.menu_mode == "name":
+                bx, by, bw, bh = self.ui_rects["menu_login_play"]
+                level = self.ease(self.hover_level.get("menu_login_play", 0.0))
+                start_color = self.lerp_color(arcade.color.GRAY, arcade.color.LIGHT_GRAY, level)
+                self.draw_scaled_rect(bx, by, bw, bh, start_color, level, scale_factor=0.22)
+                arcade.draw_text("Spielen",
+                                 bx + bw/2, by + bh/2,
+                                 arcade.color.WHITE, 30,
+                                 anchor_x="center", anchor_y="center")
+                self.start_button = (bx, by, bw, bh)
                 nx, ny, nw, nh = self.ui_rects["menu_name_field"]
-                px, py, pw, ph = self.ui_rects["menu_pass_field"]
-                arcade.draw_text("Passwort:", px, py + ph + 8, arcade.color.WHITE, 24)
-                if self.menu_auth_action == "register":
-                    arcade.draw_text("IP:", ipx, ipy + iph + 8, arcade.color.WHITE, 24)
-                    arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
-                ip_border = arcade.color.GOLD if (self.menu_focus_field == "ip" and self.menu_auth_action == "register") else arcade.color.WHITE
-                name_border = arcade.color.GOLD if (self.menu_focus_field == "name" and self.menu_auth_action == "register") else arcade.color.WHITE
-                pass_border = arcade.color.GOLD if self.menu_focus_field == "password" else arcade.color.WHITE
-                if self.menu_auth_action == "register":
-                    arcade.draw_lbwh_rectangle_outline(ipx, ipy, ipw, iph, ip_border, border_width=3)
-                    arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
-                arcade.draw_lbwh_rectangle_outline(px, py, pw, ph, pass_border, border_width=3)
-                ip_caret = "|" if (self.caret_visible and self.menu_focus_field == "ip") else ""
-                name_caret = "|" if (self.caret_visible and self.menu_focus_field == "name") else ""
-                pass_caret = "|" if (self.caret_visible and self.menu_focus_field == "password") else ""
-                if self.menu_auth_action == "register":
-                    arcade.draw_text(self.menu_ip_input + ip_caret,
-                                     ipx + 10, ipy + iph/2,
-                                     arcade.color.WHITE, 26,
-                                     anchor_y="center")
-                    arcade.draw_text(self.player_name + name_caret,
-                                     nx + 10, ny + nh/2,
-                                     arcade.color.WHITE, 26,
-                                     anchor_y="center")
-                arcade.draw_text(("*" * len(self.menu_password_input)) + pass_caret,
-                                 px + 10, py + ph/2,
+                arcade.draw_text("Name:", nx, ny + nh + 8, arcade.color.WHITE, 24)
+                name_border = arcade.color.GOLD if self.menu_focus_field == "name" else arcade.color.WHITE
+                arcade.draw_lbwh_rectangle_outline(nx, ny, nw, nh, name_border, border_width=3)
+                name_caret = "|" if self.caret_visible else ""
+                arcade.draw_text(self.player_name + name_caret,
+                                 nx + 10, ny + nh/2,
                                  arcade.color.WHITE, 26,
                                  anchor_y="center")
+                arcade.draw_text("Enter oder Klick auf Spielen",
+                                 self.width/2, by - 30,
+                                 arcade.color.LIGHT_GRAY, 20,
+                                 anchor_x="center")
 
         elif self.state == "lobby":
             with self.camera.activate():
@@ -1787,7 +1672,35 @@ class SurvivalGame(arcade.Window):
         elif self.state == "game":
 
             with self.camera.activate():
-                # Welten-Barriere (rot)
+                if self.wave_number >= 5:
+                    smoke_left = -MAP_WIDTH / 2
+                    smoke_bottom = -MAP_HEIGHT / 2
+                    smoke_right = MAP_WIDTH / 2
+                    smoke_top = MAP_HEIGHT / 2
+                    tile = 160
+                    # Rauch-Rand als giftige Außenlinie
+                    x = smoke_left
+                    while x < smoke_right:
+                        arcade.draw_texture_rect(
+                            self.smoke_texture,
+                            arcade.LBWH(x, smoke_bottom, tile, tile),
+                        )
+                        arcade.draw_texture_rect(
+                            self.smoke_texture,
+                            arcade.LBWH(x, smoke_top - tile, tile, tile),
+                        )
+                        x += tile
+                    y = smoke_bottom + tile
+                    while y < smoke_top - tile:
+                        arcade.draw_texture_rect(
+                            self.smoke_texture,
+                            arcade.LBWH(smoke_left, y, tile, tile),
+                        )
+                        arcade.draw_texture_rect(
+                            self.smoke_texture,
+                            arcade.LBWH(smoke_right - tile, y, tile, tile),
+                        )
+                        y += tile
                 arcade.draw_lbwh_rectangle_outline(-MAP_WIDTH/2, -MAP_HEIGHT/2, MAP_WIDTH, MAP_HEIGHT,
                                                    arcade.color.RED, border_width=6)
                 self.decor_list.draw()
@@ -1868,7 +1781,7 @@ class SurvivalGame(arcade.Window):
             panel_x = 20
             panel_y = self.height - 240
             panel_w = 340
-            panel_h = 120
+            panel_h = 250
             box_h = 58
             inner_x = panel_x + 14
             inner_w = panel_w - 28
@@ -1877,7 +1790,9 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text("UPGRADES",
                              panel_x + 16, panel_y + panel_h - 34,
                              arcade.color.GOLD, 22)
-            weapon_box_y = panel_y + 16
+            weapon_box_y = panel_y + 160
+            health_box_y = panel_y + 96
+            auto_box_y = panel_y + 32
 
             arcade.draw_lbwh_rectangle_filled(inner_x, weapon_box_y, inner_w, box_h, (34, 28, 24, 220))
             arcade.draw_lbwh_rectangle_outline(inner_x, weapon_box_y, inner_w, box_h,
@@ -1896,12 +1811,34 @@ class SurvivalGame(arcade.Window):
             arcade.draw_text(next_weapon_cost_text,
                              inner_x + 14, weapon_box_y + 12,
                              next_weapon_cost_color, 15)
+
+            health_cost = self.get_health_upgrade_cost()
+            arcade.draw_lbwh_rectangle_filled(inner_x, health_box_y, inner_w, box_h, (24, 30, 36, 220))
+            arcade.draw_lbwh_rectangle_outline(inner_x, health_box_y, inner_w, box_h,
+                                               arcade.color.SPRING_GREEN, 2)
+            arcade.draw_text("Lebensupgrade +20",
+                             inner_x + 14, health_box_y + box_h - 22,
+                             arcade.color.WHITE, 16)
+            arcade.draw_text(f"{health_cost} Gems",
+                             inner_x + 14, health_box_y + 12,
+                             arcade.color.SPRING_GREEN if self.gems >= health_cost else arcade.color.LIGHT_GRAY, 15)
+
+            auto_label = "Autoschuss"
+            arcade.draw_lbwh_rectangle_filled(inner_x, auto_box_y, inner_w, box_h, (34, 24, 34, 220))
+            arcade.draw_lbwh_rectangle_outline(inner_x, auto_box_y, inner_w, box_h,
+                                               arcade.color.MAGENTA, 2)
+            arcade.draw_text(auto_label,
+                             inner_x + 14, auto_box_y + box_h - 22,
+                             arcade.color.WHITE, 16)
+            arcade.draw_text("500 Gems",
+                             inner_x + 14, auto_box_y + 12,
+                             arcade.color.SPRING_GREEN if self.gems >= 500 else arcade.color.LIGHT_GRAY, 15)
+            arcade.draw_text("Nur wenn du stillstehst",
+                             inner_x + 14, auto_box_y + 28,
+                             arcade.color.LIGHT_GRAY, 12)
             arcade.draw_text(f"💎 Gems: {int(self.gems)}",
                              20, 165,
                              arcade.color.GOLD, 20)
-            arcade.draw_text(f"🩹 Bandagen: {int(self.bandages)}",
-                             20, 192,
-                             arcade.color.WHITE, 20)
             # Wave-Button ausgeblendet
             # Waffen-Slot unten links
             slot_w, slot_h = 120, 120
@@ -1931,11 +1868,6 @@ class SurvivalGame(arcade.Window):
                                  arcade.color.GOLD, 30,
                                  anchor_x="center")
                 # Keine Münz-Anzeige mehr
-            if self.bandage_message:
-                arcade.draw_text(self.bandage_message,
-                                 self.width / 2, self.height - 126,
-                                 arcade.color.SPRING_GREEN, 24,
-                                 anchor_x="center")
             if self.is_downed:
                 self.draw_cached_text(
                     "downed_title",
@@ -1949,7 +1881,7 @@ class SurvivalGame(arcade.Window):
                 if self.respawn_timer > 0:
                     self.draw_cached_text(
                         "downed_timer",
-                        f"Respawn in {int(math.ceil(self.respawn_timer))}s oder Heal durch Teammate",
+                        f"Restart in {int(math.ceil(self.respawn_timer))}s",
                         self.width / 2,
                         self.height / 2 - 8,
                         arcade.color.WHITE,
@@ -1963,7 +1895,7 @@ class SurvivalGame(arcade.Window):
                     arcade.draw_lbwh_rectangle_filled(bx, by, bw, bh, arcade.color.DARK_RED)
                     arcade.draw_lbwh_rectangle_outline(bx, by, bw, bh, arcade.color.WHITE, 2)
                     arcade.draw_text(
-                        "Respawn",
+                        "Restart",
                         bx + bw / 2,
                         by + bh / 2,
                         arcade.color.WHITE,
@@ -2057,3 +1989,32 @@ class SurvivalGame(arcade.Window):
                                   bx + bw / 2, by + bh / 2,
                                   arcade.color.WHITE, 30,
                                   anchor_x="center", anchor_y="center")
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        # Sichtbar saubere Namen: ohne Steuerzeichen/Mehrfachspaces.
+        cleaned = "".join(ch for ch in name if ch.isprintable() and ch not in "\r\n\t")
+        cleaned = " ".join(cleaned.strip().split())
+        return cleaned[:24]
+
+    @staticmethod
+    def _translate_error_message(code: str) -> str:
+        mapping = {
+            "name_taken": "Name vergeben",
+            "auth_failed": "Ungültiges Passwort",
+            "account_missing": "Kein Konto für diese IP",
+            "account_exists": "Konto existiert bereits",
+            "auth_invalid": "Ungültige Eingabe",
+            "invalid_token": "Ungültiger Server-Token",
+            "name_required": "Name erforderlich",
+        }
+        return mapping.get(code, code if code else "Unbekannter Fehler")
+
+    def _submit_name_and_start(self):
+        self.player_name = self._normalize_name(self.player_name) or "Spieler"
+        self.name_confirmed = True
+        if self.online_client and self.online_client.connected:
+            self.online_client.send_name(self.player_name)
+        self.setup_game()
+        self.state = "lobby"
+        self.lobby_timer = self.lobby_wait_time
+        self.lobby_active_circle = -1
