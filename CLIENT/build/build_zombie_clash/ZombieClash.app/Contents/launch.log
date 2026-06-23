@@ -1,0 +1,30 @@
+Server nicht erreichbar: [Errno 1] Operation not permitted
+Traceback (most recent call last):
+  File "/Users/nevenpara/Documents/Spiel/CLIENT/build/build_zombie_clash/ZombieClash.app/Contents/Resources/spiel/main.py", line 51, in main
+    _game = SurvivalGame(online_client=online_client)
+  File "/Users/nevenpara/Documents/Spiel/CLIENT/build/build_zombie_clash/ZombieClash.app/Contents/Resources/spiel/game.py", line 168, in __init__
+    super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/arcade/application.py", line 207, in __init__
+    screen = screen or display.get_default_screen()
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pyglet/display/cocoa.py", line 32, in get_default_screen
+    return screens[0]
+           ~~~~~~~^^^
+IndexError: list index out of range
+Traceback (most recent call last):
+  File "/Users/nevenpara/Documents/Spiel/CLIENT/build/build_zombie_clash/ZombieClash.app/Contents/Resources/spiel/main.py", line 61, in <module>
+    main()
+    ~~~~^^
+  File "/Users/nevenpara/Documents/Spiel/CLIENT/build/build_zombie_clash/ZombieClash.app/Contents/Resources/spiel/main.py", line 51, in main
+    _game = SurvivalGame(online_client=online_client)
+  File "/Users/nevenpara/Documents/Spiel/CLIENT/build/build_zombie_clash/ZombieClash.app/Contents/Resources/spiel/game.py", line 168, in __init__
+    super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/arcade/application.py", line 207, in __init__
+    screen = screen or display.get_default_screen()
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pyglet/display/cocoa.py", line 32, in get_default_screen
+    return screens[0]
+           ~~~~~~~^^^
+IndexError: list index out of range
