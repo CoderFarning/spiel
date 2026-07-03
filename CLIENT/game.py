@@ -167,7 +167,15 @@ class Enemy(arcade.Sprite):
 class SurvivalGame(arcade.Window):
 
     def __init__(self, online_client: OnlineClient | None = None):
-        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
+        try:
+            super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
+        except IndexError:
+            # macOS: Display nicht erreichbar (unsiged .app / no screen)
+            raise RuntimeError(
+                "Kein Display gefunden. Bitte die App mit dem Sign-Skript signieren:\n"
+                "  cd CLIENT && bash sign_app.sh\n"
+                "Falls das nicht hilft: Rechtsklick auf .app -> Oeffnen"
+            )
         # Fluesig, aber stabil (zu hohe Update-Rates erzeugen eher Ruckler/CPU-Last).
         self.set_update_rate(1/240)
         arcade.set_background_color(arcade.color.DARK_GREEN)
