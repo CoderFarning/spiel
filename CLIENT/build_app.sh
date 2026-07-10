@@ -1,6 +1,8 @@
 #!/bin/bash
 # ============================================================
-#  ZombieClash – Komplett-Build + Signierung fuer macOS
+#  ZombieClash – macOS Build + Sign + Zip
+#  Erstellt eine saubere, signierte .app und eine .zip
+#  die Apple nicht als "unbekannt" blockt.
 # ============================================================
 #
 #  Benutzung:
@@ -8,9 +10,7 @@
 #    ./build_app.sh
 #
 #  Voraussetzungen:
-#    - Python 3.13 installiert
-#    - arcade und pyinstaller installiert:
-#      pip install arcade pyinstaller
+#    pip3 install arcade pyinstaller
 # ============================================================
 
 set -euo pipefail
@@ -18,12 +18,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_NAME="ZombieClash"
+APP_PATH="$PROJECT_DIR/dist/$APP_NAME.app"
+ZIP_PATH="$PROJECT_DIR/dist/$APP_NAME.zip"
 
 echo "=== ZombieClash Build ==="
 echo ""
 
-# 1) PyInstaller-Build
-echo "[1/2] Baue App mit PyInstaller..."
+# 1) Alten Build entfernen
+echo "[1/4] Alte Build-Dateien entfernen..."
+rm -rf "$PROJECT_DIR/dist" "$PROJECT_DIR/build" "$PROJECT_DIR/$APP_NAME.spec"
+
+# 2) PyInstaller-Build
+echo "[2/4] Baue App mit PyInstaller..."
 cd "$PROJECT_DIR"
 
 pyinstaller \
@@ -33,17 +39,26 @@ pyinstaller \
     --noconfirm \
     --clean \
     --add-data "CLIENT/assets:assets" \
-    --icon "CLIENT/assets/AppIcon.icns" \
     --osx-bundle-identifier "com.nevenpara.zombieclash" \
     CLIENT/main.py
 
-echo ""
-echo "[2/2] Signiere die App..."
+# 3) Finder-Metadaten entfernen + Ad-Hoc signieren
+echo "[3/4] Signiere die App..."
+xattr -cr "$APP_PATH"
+codesign --force --deep --sign - "$APP_PATH"
 
-# 2) Sign-Skript aufrufen
-bash "$SCRIPT_DIR/sign_app.sh"
+# 4) Zip erstellen (ohne .DS_Store und __pycache__)
+echo "[4/4] Erstelle ZIP..."
+cd "$PROJECT_DIR/dist"
+ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "$APP_NAME.zip"
 
 echo ""
 echo "=== Fertig! ==="
-echo "Die App liegt hier:"
-echo "  $PROJECT_DIR/dist/$APP_NAME.app"
+echo "App:   $APP_PATH"
+echo "Zip:   $ZIP_PATH"
+echo ""
+echo "Zum Testen:"
+echo "  open \"$APP_PATH\""
+echo ""
+echo "Hinweis: Fuer volle Apple-Verifizierung (ohne Rechtsklick)"
+echo "wird ein Apple Developer Account (\$99/Jahr) fuer Notarisierung benoetigt."
