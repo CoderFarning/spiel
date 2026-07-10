@@ -1,4 +1,6 @@
 from pathlib import Path
+import sys
+import os
 
 import arcade
 import json
@@ -16,9 +18,16 @@ MAP_WIDTH = 3600
 MAP_HEIGHT = 3600
 LOBBY_WIDTH = 4400
 LOBBY_HEIGHT = 4400
-ASSET_BASE = Path(__file__).resolve().parent / "assets"
+
+# PyInstaller: assets liegen im _MEIPASS/assets Ordner
+if getattr(sys, 'frozen', False):
+    _BASE = Path(sys._MEIPASS)
+else:
+    _BASE = Path(__file__).resolve().parent
+
+ASSET_BASE = _BASE / "assets"
 if not ASSET_BASE.exists():
-    ASSET_BASE = Path(__file__).resolve().parent
+    ASSET_BASE = _BASE
 IMG_DIR = ASSET_BASE
 SOUND_DIR = ASSET_BASE
 
