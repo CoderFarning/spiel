@@ -14,10 +14,10 @@ import time
 SCREEN_TITLE = "Survival Map"
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-MAP_WIDTH = 5000
-MAP_HEIGHT = 5000
-LOBBY_WIDTH = 4400
-LOBBY_HEIGHT = 4400
+MAP_WIDTH = 7000
+MAP_HEIGHT = 7000
+LOBBY_WIDTH = 6000
+LOBBY_HEIGHT = 6000
 
 # PyInstaller: assets liegen im _MEIPASS/assets Ordner
 if getattr(sys, 'frozen', False):
@@ -833,7 +833,7 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["prep_upgrade"] = (0, 0, 0, 0)
         self.ui_rects["info_button"] = (0, 0, 0, 0)
         panel_x = 20
-        panel_y = self.height - 530
+        panel_y = self.height - 700
         panel_w = 340
         panel_h = 250
         box_h = 58
@@ -1821,7 +1821,7 @@ class SurvivalGame(arcade.Window):
                              hud_left_x, hud_left_y - 36,
                              arcade.color.WHITE, 20)
             panel_x = 20
-            panel_y = self.height - 530
+            panel_y = self.height - 700
             panel_w = 340
             panel_h = 250
             box_h = 58
