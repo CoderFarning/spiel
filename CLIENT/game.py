@@ -14,8 +14,8 @@ import time
 SCREEN_TITLE = "Survival Map"
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-MAP_WIDTH = 3600
-MAP_HEIGHT = 3600
+MAP_WIDTH = 5000
+MAP_HEIGHT = 5000
 LOBBY_WIDTH = 4400
 LOBBY_HEIGHT = 4400
 
@@ -175,7 +175,7 @@ class Enemy(arcade.Sprite):
 
 class SurvivalGame(arcade.Window):
 
-    def __init__(self, online_client: OnlineClient | None = None):
+    def __init__(self, online_client: OnlineClient | None = None, server_unreachable: bool = False):
         try:
             super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=False, resizable=True)
         except IndexError:
@@ -328,10 +328,15 @@ class SurvivalGame(arcade.Window):
             self.player_name = self.online_client.name
         if self.player_name.strip().lower() == "spieler":
             self.player_name = ""
+        self.server_unreachable = server_unreachable
+        self.no_server_timer = 5.0
         self.name_confirmed = False
         self.menu_mode = "name"
         self.menu_focus_field = "name"
-        self.state = "menu"
+        if server_unreachable:
+            self.state = "no_server"
+        else:
+            self.state = "menu"
 
     # ---------------- SETUP ----------------
     def setup_game(self):
@@ -828,7 +833,7 @@ class SurvivalGame(arcade.Window):
         self.ui_rects["prep_upgrade"] = (0, 0, 0, 0)
         self.ui_rects["info_button"] = (0, 0, 0, 0)
         panel_x = 20
-        panel_y = self.height - 240
+        panel_y = self.height - 530
         panel_w = 340
         panel_h = 250
         box_h = 58
@@ -1093,6 +1098,12 @@ class SurvivalGame(arcade.Window):
         else:
             self.caret_visible = True
             self.caret_timer = 0.0
+
+        if self.state == "no_server":
+            self.no_server_timer -= delta_time
+            if self.no_server_timer <= 0:
+                self.close()
+            return
 
         self.update_hover_levels(delta_time)
 
@@ -1544,6 +1555,18 @@ class SurvivalGame(arcade.Window):
         self.clear()
         self.ensure_ui_rects()
 
+        if self.state == "no_server":
+            remaining = max(0, math.ceil(self.no_server_timer))
+            arcade.draw_text("Kein Server gefunden!",
+                             self.width/2, self.height/2 + 40,
+                             arcade.color.RED, 48,
+                             anchor_x="center")
+            arcade.draw_text(f"Spiel schließt in {int(remaining)} Sekunden...",
+                             self.width/2, self.height/2 - 30,
+                             arcade.color.WHITE, 28,
+                             anchor_x="center")
+            return
+
         if self.state == "menu":
 
             arcade.draw_text("SURVIVAL MAP",
@@ -1798,7 +1821,7 @@ class SurvivalGame(arcade.Window):
                              hud_left_x, hud_left_y - 36,
                              arcade.color.WHITE, 20)
             panel_x = 20
-            panel_y = self.height - 240
+            panel_y = self.height - 530
             panel_w = 340
             panel_h = 250
             box_h = 58

@@ -46,9 +46,14 @@ def main():
             connect_error["message"] = str(exc)
             print(f"Server nicht erreichbar: {exc}")
 
-    threading.Thread(target=connect_in_background, daemon=True).start()
+    connect_thread = threading.Thread(target=connect_in_background, daemon=True)
+    connect_thread.start()
+    # Warte bis zu 3 Sekunden auf Server-Verbindung
+    connect_thread.join(timeout=3.0)
+
+    server_unreachable = not online_client.connected
     try:
-        _game = SurvivalGame(online_client=online_client)
+        _game = SurvivalGame(online_client=online_client, server_unreachable=server_unreachable)
         arcade.run()
     except Exception:
         traceback.print_exc()
